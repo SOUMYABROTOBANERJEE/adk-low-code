@@ -1,0 +1,62 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    background-color: #4285F4 !important;
+}
+
+.navbar-brand {
+    font-weight: bold;
+    color: white !important;
+}
+
+.card {
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    border: none;
+}
+
+.card-header {
+    background-color: #f1f3f4;
+    border-bottom: none;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: #4285F4;
+    border-color: #4285F4;
+}
+
+.btn-primary:hover {
+    background-color: #3367d6;
+    border-color: #3367d6;
+}
+
+pre {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+}
+
+.template-card {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.template-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tool-checkbox {
+    margin-bottom: 10px;
+}
+
+.tool-description {
+    font-size: 0.875rem;
+    color: #6c757d;
+}

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "google-adk-nocode"
+version = "0.1.3"
+authors = [
+    {name = "ADK Community", email = "example@example.com"},
+]
+description = "No-code interface for the Google Agent Development Kit with multi-tech stack support"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi>=0.95.0",
+    "uvicorn>=0.21.1",
+    "jinja2>=3.1.2",
+    "pydantic>=2.0.0",
+    "requests>=2.28.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/abhishekkumar35/google-adk-nocode"
+"Bug Tracker" = "https://github.com/abhishekkumar35/google-adk-nocode/issues"
+"Funding" = "https://github.com/sponsors/abhishekkumar35"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "build>=0.10.0",
+    "twine>=4.0.0",
+]
+
+[project.scripts]
+adk-nocode = "google.adk.nocode.cli:main"
+
+[tool.setuptools.package-data]
+"google.adk.nocode" = ["templates/*.html", "static/css/*.css", "static/js/*.js"]
