@@ -96,7 +96,7 @@ fetch('http://localhost:8000/api/generate', {
 
 ## Documentation
 
-For full documentation, visit [our documentation site](https://github.com/abhishekkumar35/google-adk-nocode).
+For full documentation, visit [our documentation site](https://abhishekkumar35.github.io/google-adk-nocode/).
 
 ## Support the Project
 
