@@ -2,6 +2,7 @@ import os
 import json
 import uvicorn
 import requests
+import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -9,12 +10,46 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+# Load environment variables from config file
+def load_env_config():
+    """Load environment variables from config.env file."""
+    config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'config.env')
+    if os.path.exists(config_file):
+        with open(config_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip()
+
+# Load configuration
+load_env_config()
+
 # Import Ollama integration
 try:
     from .ollama_integration import generate_ollama_agent_code, check_ollama_availability, list_ollama_models
     OLLAMA_AVAILABLE = check_ollama_availability()
 except ImportError:
     OLLAMA_AVAILABLE = False
+
+# Google Gemini API Configuration
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', 'AIzaSyAameifAiVmm05ww2Ib5ofFmvbGGHFTSnk')
+GOOGLE_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+def check_google_api_key():
+    """Check if Google API key is valid by making a test request."""
+    if not GOOGLE_API_KEY:
+        return False
+    
+    try:
+        # Test the API key with a simple request
+        test_url = f"{GOOGLE_API_BASE_URL}/gemini-1.5-flash"
+        headers = {"Authorization": f"Bearer {GOOGLE_API_KEY}"}
+        response = requests.get(test_url, headers=headers, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Error checking Google API key: {e}")
+        return False
 
 # Define model classes
 class SubAgentConfig(BaseModel):
@@ -59,6 +94,30 @@ def create_app():
     # Mount static files
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+    # Create custom tools directory and file
+    custom_tools_dir = os.path.join(current_dir, "custom_tools")
+    custom_tools_file = os.path.join(custom_tools_dir, "tools.json")
+    os.makedirs(custom_tools_dir, exist_ok=True)
+    if not os.path.exists(os.path.join(custom_tools_dir, "__init__.py")):
+        open(os.path.join(custom_tools_dir, "__init__.py"), "a").close()
+    if not os.path.exists(custom_tools_file):
+        with open(custom_tools_file, "w") as f:
+            json.dump([], f)
+
+    def _load_custom_tools():
+        try:
+            if os.path.exists(custom_tools_file):
+                with open(custom_tools_file, "r") as f:
+                    return json.load(f)
+            return []
+        except Exception as e:
+            print(f"Error loading custom tools: {e}")
+            return []
+
+    def _save_custom_tools(tools: list):
+        with open(custom_tools_file, "w") as f:
+            json.dump(tools, f, indent=2)
+
     @app.get("/", response_class=HTMLResponse)
     async def root(request: Request):
         """Serve the main page."""
@@ -67,13 +126,25 @@ def create_app():
     @app.get("/api/models")
     async def get_models():
         """Get available LLM models."""
-        models = [
-            # Google Gemini models
-            {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "provider": "google"},
-            {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "provider": "google"},
-            {"id": "gemini-2.0-flash-001", "name": "Gemini 2.0 Flash", "provider": "google"},
-            {"id": "gemini-2.0-pro-001", "name": "Gemini 2.0 Pro", "provider": "google"},
-        ]
+        models = []
+        
+        # Check Google API key and add Gemini models if available
+        google_api_available = check_google_api_key()
+        if google_api_available:
+            models.extend([
+                {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "provider": "google", "status": "available"},
+                {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "provider": "google", "status": "available"},
+                {"id": "gemini-2.0-flash-001", "name": "Gemini 2.0 Flash", "provider": "google", "status": "available"},
+                {"id": "gemini-2.0-pro-001", "name": "Gemini 2.0 Pro", "provider": "google", "status": "available"},
+            ])
+        else:
+            # Add models but mark as unavailable
+            models.extend([
+                {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "provider": "google", "status": "unavailable", "reason": "API key not configured or invalid"},
+                {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "provider": "google", "status": "unavailable", "reason": "API key not configured or invalid"},
+                {"id": "gemini-2.0-flash-001", "name": "Gemini 2.0 Flash", "provider": "google", "status": "unavailable", "reason": "API key not configured or invalid"},
+                {"id": "gemini-2.0-pro-001", "name": "Gemini 2.0 Pro", "provider": "google", "status": "unavailable", "reason": "API key not configured or invalid"},
+            ])
         
         # Add Ollama models if available
         if OLLAMA_AVAILABLE:
@@ -84,31 +155,48 @@ def create_app():
                 else:
                     # Fallback to default Ollama models
                     models.extend([
-                        {"id": "llama3:8b", "name": "Llama 3 (8B)", "provider": "ollama"},
-                        {"id": "llama3:70b", "name": "Llama 3 (70B)", "provider": "ollama"},
-                        {"id": "mistral", "name": "Mistral", "provider": "ollama"},
-                        {"id": "mixtral", "name": "Mixtral", "provider": "ollama"},
-                        {"id": "phi3", "name": "Phi-3", "provider": "ollama"},
-                        {"id": "gemma:7b", "name": "Gemma (7B)", "provider": "ollama"},
-                        {"id": "gemma:2b", "name": "Gemma (2B)", "provider": "ollama"},
-                        {"id": "codellama", "name": "Code Llama", "provider": "ollama"},
+                        {"id": "llama3:8b", "name": "Llama 3 (8B)", "provider": "ollama", "status": "available"},
+                        {"id": "llama3:70b", "name": "Llama 3 (70B)", "provider": "ollama", "status": "available"},
+                        {"id": "mistral", "name": "Mistral", "provider": "ollama", "status": "available"},
+                        {"id": "mixtral", "name": "Mixtral", "provider": "ollama", "status": "available"},
+                        {"id": "phi3", "name": "Phi-3", "provider": "ollama", "status": "available"},
+                        {"id": "gemma:7b", "name": "Gemma (7B)", "provider": "ollama", "status": "available"},
+                        {"id": "gemma:2b", "name": "Gemma (2B)", "provider": "ollama", "status": "available"},
+                        {"id": "codellama", "name": "Code Llama", "provider": "ollama", "status": "available"},
                     ])
             except Exception as e:
                 print(f"Error fetching Ollama models: {e}")
         
-        return {"models": models}
+        return {"models": models, "google_api_available": google_api_available}
+
+    @app.get("/api/config")
+    async def get_config():
+        """Get application configuration and API key status."""
+        return {
+            "google_api_key_configured": bool(GOOGLE_API_KEY),
+            "google_api_available": check_google_api_key(),
+            "ollama_available": OLLAMA_AVAILABLE,
+            "api_base_urls": {
+                "google": GOOGLE_API_BASE_URL,
+                "ollama": "http://localhost:11434" if OLLAMA_AVAILABLE else None
+            }
+        }
 
     @app.get("/api/tools")
     async def get_tools():
-        """Get available tools."""
-        return {
-            "tools": [
-                {"id": "google_search", "name": "Google Search", "description": "Search the web using Google"},
-                {"id": "load_web_page", "name": "Load Web Page", "description": "Load and extract content from a web page"},
-                {"id": "built_in_code_execution", "name": "Code Execution", "description": "Execute Python code"},
-                {"id": "get_user_choice", "name": "User Choice", "description": "Ask the user to make a choice"},
-            ]
-        }
+        """Get built-in and custom tools."""
+        built_in = [
+            {"id": "google_search", "name": "Google Search", "description": "Search the web using Google"},
+            {"id": "load_web_page", "name": "Load Web Page", "description": "Load and extract content from a web page"},
+            {"id": "built_in_code_execution", "name": "Code Execution", "description": "Execute Python code"},
+            {"id": "get_user_choice", "name": "User Choice", "description": "Ask the user to make a choice"},
+        ]
+        try:
+            custom_tools = _load_custom_tools()
+            return {"tools": built_in + custom_tools}
+        except Exception as e:
+            print(f"Error in get_tools: {e}")
+            return {"tools": built_in}
 
     @app.get("/api/templates")
     async def get_templates():
@@ -308,7 +396,7 @@ def create_app():
             
             # Save config.json
             with open(os.path.join(agent_path, "config.json"), "w") as f:
-                f.write(agent_config.json(indent=2))
+                f.write(agent_config.model_dump_json(indent=2))
             
             return {"message": f"Agent '{agent_config.name}' created successfully", "path": agent_path}
         except Exception as e:
@@ -363,13 +451,197 @@ def create_app():
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to run agent: {str(e)}")
 
+    # Chat functionality
+    class ChatMessage(BaseModel):
+        message: str
+        agent_id: str
+
+    @app.post("/api/chat/{agent_id}")
+    async def chat_with_agent(agent_id: str, chat_message: ChatMessage):
+        """Chat with a specific agent."""
+        agent_path = os.path.join(agents_dir, agent_id)
+        
+        if not os.path.exists(agent_path) or not os.path.exists(os.path.join(agent_path, "agent.py")):
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        
+        try:
+            # Load agent configuration
+            agent_config_file = os.path.join(agent_path, "config.json")
+            if os.path.exists(agent_config_file):
+                with open(agent_config_file, 'r') as f:
+                    agent_config = json.load(f)
+            else:
+                # Fallback to basic agent info
+                agent_config = {"name": agent_id, "model": "unknown", "provider": "unknown"}
+            
+            # Import and run the actual agent
+            try:
+                # Add the agent directory to Python path
+                sys.path.insert(0, agent_path)
+                
+                # Import the agent module
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("agent", os.path.join(agent_path, "agent.py"))
+                agent_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(agent_module)
+                
+                # Get the root agent
+                if hasattr(agent_module, 'root_agent'):
+                    agent = agent_module.root_agent
+                else:
+                    raise Exception("No root_agent found in agent module")
+                
+                # Run the agent with the user's message
+                if hasattr(agent, 'generate_content'):
+                    # Use the generate_content method (primary method)
+                    result = await agent.generate_content(chat_message.message)
+                    response = result.text if hasattr(result, 'text') else str(result)
+                elif hasattr(agent, 'chat'):
+                    # Use the chat method if available
+                    result = await agent.chat(chat_message.message)
+                    response = str(result)
+                elif hasattr(agent, 'run'):
+                    # Use the run method if available
+                    result = await agent.run(chat_message.message)
+                    response = str(result)
+                else:
+                    raise Exception("Agent has no generate_content, chat, or run method")
+                
+            except Exception as agent_error:
+                # If agent execution fails, provide a helpful error message
+                response = f"I'm {agent_config.get('name', agent_id)}, but I encountered an error while processing your message: '{chat_message.message}'. Error: {str(agent_error)}. Please check my configuration and try again."
+                print(f"Agent execution error: {agent_error}")
+            
+            return {
+                "response": response,
+                "agent_id": agent_id,
+                "agent_name": agent_config.get('name', agent_id),
+                "timestamp": str(datetime.datetime.now())
+            }
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to chat with agent: {str(e)}")
+
+    
+    # Custom Tools Support
+    class CustomTool(BaseModel):
+        id: str
+        name: str
+        description: str
+        code: str | None = None
+        parameters: dict | None = None
+        return_type: str | None = None
+        examples: list | None = None
+
+    @app.get("/api/custom_tools")
+    async def list_custom_tools():
+        """List user-defined custom tools."""
+        return {"tools": _load_custom_tools()}
+
+    @app.post("/api/custom_tools")
+    async def create_custom_tool(tool: CustomTool):
+        """Create a new custom tool."""
+        tools = _load_custom_tools()
+        if any(t["id"] == tool.id for t in tools):
+            raise HTTPException(status_code=400, detail=f"Tool '{tool.id}' already exists")
+        tools.append(tool.model_dump())
+        _save_custom_tools(tools)
+        if tool.code:
+            mod_path = os.path.join(custom_tools_dir, f"{tool.id}.py")
+            with open(mod_path, "w") as f:
+                f.write(tool.code)
+        return {"message": f"Tool '{tool.id}' created"}
+
+    @app.get("/api/function_tools")
+    async def get_function_tools():
+        """Get function tool templates and examples."""
+        return {
+            "templates": [
+                {
+                    "id": "calculator",
+                    "name": "Calculator Tool",
+                    "description": "A simple calculator that can perform basic arithmetic operations",
+                    "code": """def calculator(operation: str, a: float, b: float) -> float:
+    \"\"\"Perform basic arithmetic operations.
+    
+    Args:
+        operation: The operation to perform ('add', 'subtract', 'multiply', 'divide')
+        a: First number
+        b: Second number
+    
+    Returns:
+        The result of the operation
+    \"\"\"
+    if operation == 'add':
+        return a + b
+    elif operation == 'subtract':
+        return a - b
+    elif operation == 'multiply':
+        return a * b
+    elif operation == 'divide':
+        if b == 0:
+            raise ValueError("Cannot divide by zero")
+        return a / b
+    else:
+        raise ValueError(f"Unknown operation: {operation}")""",
+                    "parameters": {
+                        "operation": {"type": "string", "description": "Arithmetic operation", "enum": ["add", "subtract", "multiply", "divide"]},
+                        "a": {"type": "number", "description": "First number"},
+                        "b": {"type": "number", "description": "Second number"}
+                    },
+                    "return_type": "number",
+                    "examples": [
+                        {"input": {"operation": "add", "a": 5, "b": 3}, "output": 8},
+                        {"input": {"operation": "multiply", "a": 4, "b": 7}, "output": 28}
+                    ]
+                },
+                {
+                    "id": "text_processor",
+                    "name": "Text Processor Tool",
+                    "description": "Process and analyze text content",
+                    "code": """def text_processor(text: str, operation: str) -> str:
+    \"\"\"Process text using various operations.
+    
+    Args:
+        text: Input text to process
+        operation: The operation to perform ('uppercase', 'lowercase', 'count_words', 'reverse')
+    
+    Returns:
+        Processed text or analysis result
+    \"\"\"
+    if operation == 'uppercase':
+        return text.upper()
+    elif operation == 'lowercase':
+        return text.lower()
+    elif operation == 'count_words':
+        return str(len(text.split()))
+    elif operation == 'reverse':
+        return text[::-1]
+    else:
+        raise ValueError(f"Unknown operation: {operation}")""",
+                    "parameters": {
+                        "text": {"type": "string", "description": "Input text to process"},
+                        "operation": {"type": "string", "description": "Text processing operation", "enum": ["uppercase", "lowercase", "count_words", "reverse"]}
+                    },
+                    "return_type": "string",
+                    "examples": [
+                        {"input": {"text": "Hello World", "operation": "uppercase"}, "output": "HELLO WORLD"},
+                        {"input": {"text": "Python Programming", "operation": "count_words"}, "output": "2"}
+                    ]
+                }
+            ]
+        }
+    
     return app
 
 def generate_agent_code(agent_config: AgentConfig) -> str:
     """Generate agent.py code from configuration."""
     imports = [
+        "import sys, pathlib, os",
+        "sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent / 'custom_tools'))",
         "from google.adk.agents import Agent",
         "from google.genai import types",
+        "import asyncio",
     ]
     
     # Add tool imports
@@ -384,6 +656,8 @@ def generate_agent_code(agent_config: AgentConfig) -> str:
                 tool_imports.add("from google.adk.tools import built_in_code_execution")
             elif tool_id == "get_user_choice":
                 tool_imports.add("from google.adk.tools import get_user_choice")
+            else:
+                tool_imports.add(f"from custom_tools.{tool_id} import {tool_id}")  # Custom tool fallback import
         
         imports.extend(sorted(tool_imports))
     
@@ -447,6 +721,23 @@ root_agent = Agent(
     
     # Combine all code
     code = "\n".join(imports) + "\n\n" + sub_agent_code + root_agent_code
+    
+    # Add main execution block for testing
+    code += f"""
+
+# Main execution block for testing
+if __name__ == "__main__":
+    async def main():
+        # Test the agent
+        try:
+            result = await root_agent.generate_content("Hello, how are you?")
+            print(f"Agent response: {{result.text if hasattr(result, 'text') else result}}")
+        except Exception as e:
+            print(f"Error running agent: {{e}}")
+    
+    # Run the async main function
+    asyncio.run(main())
+"""
     
     return code
 

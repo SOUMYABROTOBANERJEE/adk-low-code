@@ -12,8 +12,12 @@ from pathlib import Path
 src_dir = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_dir))
 
-from google.adk.nocode.app import create_app, run_server
+from src.google.adk.nocode.app import create_app
+from dotenv import load_dotenv
+
+load_dotenv('config.env')
 
 if __name__ == "__main__":
+    import uvicorn
     app = create_app()
-    run_server(app, host="127.0.0.1", port=8080)
+    uvicorn.run(app, host="127.0.0.1", port=8080)
