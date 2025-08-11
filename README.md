@@ -1,115 +1,289 @@
-# No-Code ADK Interface [our site](https://abhishekkumar35.github.io/google-adk-nocode/docs/index.html)
+# Google ADK No-Code Platform
 
-A visual, no-code interface for creating, configuring, and deploying AI agents using the Google Agent Development Kit (ADK) without writing Python code. This package also supports integration with various tech stacks including Node.js and TypeScript.
+A comprehensive, visual platform for building, configuring, and testing AI agents using Google's Agent Development Kit (ADK) without writing Python code.
 
-## Latest Updates (v0.1.3)
+![Platform Screenshot](https://via.placeholder.com/800x400/4A90E2/FFFFFF?text=Google+ADK+Platform)
 
-- **Improved Package Structure**: Fixed issues with static files and templates
-- **Enhanced Ollama Integration**: Better support for locally installed Ollama models
-- **Multi-Tech Stack Support**: Generate API wrappers and clients for different programming languages
-- **GitHub Sponsors Integration**: Added support for project funding
+## 🚀 Features
 
-## Features
+### Core Functionality
+- **Visual Agent Builder**: Create and configure AI agents through an intuitive web interface
+- **Tool Management**: Create custom function tools, integrate built-in tools, and manage tool configurations
+- **Multi-Agent Systems**: Build complex workflows with sequential, parallel, and loop agents
+- **Real-time Chat Interface**: Test your agents immediately in a chat environment
+- **Code Generation**: Export your agent configurations as ready-to-run Python code
 
-- Visual agent builder with intuitive interface
-- Tool configuration through forms
-- Agent flow visualization and editing
-- One-click deployment
-- Template library for common agent patterns
-- Export to Python code for advanced customization
-- Support for both Google Gemini models and local Ollama models
-- Multi-tech stack integration (Python, Node.js, TypeScript, etc.)
+### Advanced Capabilities
+- **Model Configuration**: Fine-tune Gemini models with temperature, max tokens, and other parameters
+- **Tool Integration**: Attach multiple tools to agents for enhanced capabilities
+- **Project Management**: Organize agents and tools into projects
+- **Export & Deployment**: Generate production-ready Python code for deployment
+- **WebSocket Support**: Real-time communication for enhanced chat experience
 
-## Installation
+## 🏗️ Architecture
 
+The platform is built with a modern, scalable architecture:
+
+- **Backend**: FastAPI with async support and WebSocket capabilities
+- **Frontend**: Modern HTML5 with Tailwind CSS and vanilla JavaScript
+- **Data Models**: Pydantic models for type safety and validation
+- **ADK Integration**: Direct integration with Google's Agent Development Kit
+- **Real-time Communication**: WebSocket support for live chat
+
+## 📋 Requirements
+
+- Python 3.9+
+- Google ADK 0.2.0+
+- FastAPI and related web dependencies
+- Google Cloud credentials (for Gemini models)
+
+## 🛠️ Installation
+
+### 1. Clone the Repository
 ```bash
-pip install google-adk-nocode
+git clone https://github.com/yourusername/adk-low-code.git
+cd adk-low-code
 ```
 
-## Quick Start
-
-1. Launch the no-code interface:
+### 2. Install Dependencies
 ```bash
-adk-nocode start
+pip install -r requirements.txt
 ```
 
-2. Access the interface at http://localhost:8080
+### 3. Set Up Environment Variables
+Create a `config.env` file:
+```env
+GOOGLE_API_KEY=your_google_api_key_here
+GOOGLE_CLOUD_PROJECT=your_project_id
+```
 
-3. Create your first agent using the visual interface
+### 4. Run the Platform
+```bash
+# Using Python directly
+python app.py
 
-## Using Agents in Different Tech Stacks
+# Using the CLI
+python src/google/adk1/nocode/cli.py start
 
-### Python Applications
+# Using the CLI with auto-browser opening
+python src/google/adk1/nocode/cli.py start --open-browser
+```
 
-Agents created with the No-Code ADK can be directly imported in Python:
+## 🎯 Quick Start
 
+### 1. Access the Platform
+Open your browser and navigate to `http://localhost:8080`
+
+### 2. Create Your First Tool
+1. Click "New Tool" in the navigation
+2. Choose "Function Tool" type
+3. Write your Python function code
+4. Save the tool
+
+### 3. Create Your First Agent
+1. Click "New Agent" in the navigation
+2. Configure the agent:
+   - Name and description
+   - System prompt
+   - Model settings (temperature, max tokens)
+   - Attach tools
+3. Save the agent
+
+### 4. Test Your Agent
+1. Select your agent from the chat interface
+2. Type a message and press Enter
+3. Watch your agent respond using the configured tools!
+
+### 5. Export Your Code
+1. Click the code icon on any agent
+2. Review the generated Python code
+3. Download the code for deployment
+
+## 🔧 API Endpoints
+
+The platform provides a comprehensive REST API:
+
+### Agents
+- `GET /api/agents` - List all agents
+- `POST /api/agents` - Create a new agent
+- `GET /api/agents/{id}` - Get agent details
+- `PUT /api/agents/{id}` - Update an agent
+- `DELETE /api/agents/{id}` - Delete an agent
+
+### Tools
+- `GET /api/tools` - List all tools
+- `POST /api/tools` - Create a new tool
+- `GET /api/tools/{id}` - Get tool details
+- `PUT /api/tools/{id}` - Update a tool
+- `DELETE /api/tools/{id}` - Delete a tool
+
+### Chat & Execution
+- `POST /api/chat/{agent_id}` - Chat with an agent
+- `GET /api/chat/sessions/{session_id}` - Get chat session
+- `DELETE /api/chat/sessions/{session_id}` - Clear chat session
+
+### Code Generation
+- `POST /api/generate/{agent_id}` - Generate Python code for an agent
+- `POST /api/export/project/{project_id}` - Export project as Python files
+
+### WebSocket
+- `WS /ws/chat/{agent_id}` - Real-time chat with an agent
+
+## 🎨 UI Components
+
+### Agent Configuration Panel
+- **Basic Settings**: Name, description, type
+- **System Prompt**: Define agent behavior and capabilities
+- **Model Configuration**: Temperature, max tokens, model selection
+- **Tool Selection**: Attach multiple tools to agents
+- **Advanced Options**: Instructions, tags, workflow configuration
+
+### Tool Creation Interface
+- **Tool Types**: Function, Built-in, Google Cloud, MCP, OpenAPI
+- **Code Editor**: Write Python functions for custom tools
+- **Parameter Configuration**: Define tool inputs and outputs
+- **Validation**: Syntax checking and error handling
+
+### Chat Interface
+- **Agent Selection**: Choose which agent to chat with
+- **Real-time Messaging**: Instant responses with WebSocket support
+- **Session Management**: Persistent chat history
+- **Error Handling**: Clear error messages and debugging
+
+### Code Generation
+- **Python Export**: Generate production-ready Python code
+- **Project Structure**: Complete project files with dependencies
+- **Download Support**: Direct file downloads for generated code
+- **Code Preview**: Review generated code before downloading
+
+## 🔌 Tool Types
+
+### Function Tools
+Create custom Python functions that agents can call:
 ```python
-from your_agent_package import root_agent
-
-async def main():
-    response = await root_agent.generate_content("Hello, agent!")
-    print(response.text)
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+def execute(input_data: str) -> str:
+    # Your custom logic here
+    result = process_input(input_data)
+    return f"Processed: {result}"
 ```
 
-### Node.js/TypeScript Applications
+### Built-in Tools
+Integrate with ADK's built-in tool ecosystem:
+- Search tools
+- Code execution
+- File operations
+- Web scraping
 
-The No-Code ADK can generate REST API wrappers for your agents, making them accessible from any tech stack:
+### Google Cloud Tools
+Leverage Google Cloud services:
+- Vertex AI
+- Cloud Storage
+- BigQuery
+- Cloud Functions
 
-1. Enable API export when creating your agent
-2. Use the generated API client in your Node.js/TypeScript application:
+### MCP Tools
+Model Context Protocol integration for enhanced capabilities.
 
-```typescript
-// TypeScript example
-import { AgentClient } from './generated/agent-client';
+### OpenAPI Tools
+Integrate with any OpenAPI-compliant service.
 
-async function main() {
-  const agent = new AgentClient('http://localhost:8000');
-  const response = await agent.generateContent('Hello, agent!');
-  console.log(response.text);
-}
+## 🚀 Deployment
 
-main().catch(console.error);
+### Local Development
+```bash
+python app.py
 ```
 
-### Other Tech Stacks
+### Production Deployment
+```bash
+# Using Gunicorn
+gunicorn src.google.adk1.nocode.main:app -w 4 -k uvicorn.workers.UvicornWorker
 
-For other tech stacks, you can use the REST API directly:
-
-```javascript
-// JavaScript fetch example
-fetch('http://localhost:8000/api/generate', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    prompt: 'Hello, agent!',
-  }),
-})
-.then(response => response.json())
-.then(data => console.log(data.text));
+# Using Docker
+docker build -t adk-platform .
+docker run -p 8080:8080 adk-platform
 ```
 
-## Documentation
+### Cloud Deployment
+- **Google Cloud Run**: Serverless deployment
+- **Google Kubernetes Engine**: Scalable container deployment
+- **Cloud Functions**: Event-driven execution
+- **App Engine**: Managed platform deployment
 
-For full documentation, visit [our documentation site](https://abhishekkumar35.github.io/google-adk-nocode/).
+## 🧪 Testing
 
-## Support the Project
+Run the test suite:
+```bash
+# Using the CLI
+python src/google/adk1/nocode/cli.py test
 
-If you find No-Code ADK useful, please consider supporting its development:
+# Using pytest directly
+pytest test_google_adk.py
+```
 
-[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa.svg)](https://github.com/sponsors/abhishekkumar35)
+## 📚 Documentation
 
-Your support helps ensure the continued development and maintenance of this project.
+- **API Documentation**: Available at `/docs` when running the platform
+- **Google ADK Docs**: [https://google.github.io/adk-docs/](https://google.github.io/adk-docs/)
+- **Platform Guide**: Comprehensive usage guide in the platform UI
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## License
+### Development Setup
+```bash
+# Install development dependencies
+pip install -r requirements.txt
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+# Run with auto-reload
+python app.py
+
+# Run tests
+pytest
+
+# Format code
+black src/
+isort src/
+```
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Google ADK Team**: For the excellent Agent Development Kit
+- **FastAPI**: For the modern, fast web framework
+- **Tailwind CSS**: For the beautiful, responsive UI components
+- **Open Source Community**: For the tools and libraries that make this possible
+
+## 📞 Support
+
+- **Issues**: Report bugs and request features on GitHub
+- **Discussions**: Join community discussions
+- **Documentation**: Check the platform's built-in help system
+- **Email**: Contact the development team
+
+## 🔮 Roadmap
+
+### Upcoming Features
+- **Visual Workflow Builder**: Drag-and-drop workflow creation
+- **Agent Templates**: Pre-built agent configurations
+- **Advanced Analytics**: Performance metrics and insights
+- **Team Collaboration**: Multi-user support and sharing
+- **Plugin System**: Extensible tool and agent ecosystem
+- **Mobile App**: Native mobile application
+- **Enterprise Features**: SSO, RBAC, audit logging
+
+### Long-term Vision
+- **AI-Powered Agent Generation**: Generate agents from natural language descriptions
+- **Advanced Workflow Orchestration**: Complex multi-agent workflows
+- **Integration Marketplace**: Third-party tool and service integrations
+- **Global Agent Network**: Share and discover agents across the community
+
+---
+
+**Built with ❤️ by the ADK Community**
+
+*Transform your ideas into intelligent agents with the power of Google ADK and the simplicity of no-code development.*
