@@ -92,8 +92,16 @@ async def create_tool(tool: ToolDefinition):
 async def list_tools():
     """List all tools"""
     try:
-        tools = db_manager.get_all_tools()
-        return {"tools": tools}
+        # Get custom tools from database
+        custom_tools = db_manager.get_all_tools()
+        
+        # Get built-in tools from ADK service
+        builtin_tools = adk_service.get_builtin_tools() if adk_service.is_available() else []
+        
+        # Combine both types of tools
+        all_tools = custom_tools + builtin_tools
+        
+        return {"tools": all_tools}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -721,6 +729,17 @@ def execute(expression: str) -> str:
             if adk_service.register_tool(sample_tool):
                 db_manager.save_tool(sample_tool.model_dump())
                 print(f"Sample tool '{sample_tool.name}' created and saved to database")
+        
+        # Register built-in tools with ADK service
+        if adk_service.is_available():
+            print("Registering built-in tools...")
+            builtin_tools = adk_service.get_builtin_tools()
+            for tool_data in builtin_tools:
+                tool = ToolDefinition(**tool_data)
+                if adk_service.register_tool(tool):
+                    print(f"Registered built-in tool: {tool.name}")
+                else:
+                    print(f"Failed to register built-in tool: {tool.name}")
         
         if not existing_agents:
             # Create sample agent if none exist

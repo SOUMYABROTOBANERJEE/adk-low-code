@@ -16,6 +16,7 @@ try:
     # Import ADK modules from the correct submodules
     from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent, LoopAgent
     from google.adk.tools import FunctionTool
+    from google.adk.tools import google_search
     from google.adk.models import Gemini
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
@@ -81,6 +82,24 @@ class ADKService:
     def is_genai_available(self) -> bool:
         """Check if Google GenAI is available"""
         return GENAI_AVAILABLE and self.genai_client is not None
+    
+    def get_builtin_tools(self) -> List[Dict[str, Any]]:
+        """Get list of available built-in tools"""
+        if not ADK_AVAILABLE:
+            return []
+        
+        builtin_tools = [
+            {
+                "id": "google_search",
+                "name": "Google Search",
+                "description": "Search the web using Google Search. Only compatible with Gemini 2 models.",
+                "tool_type": "builtin",
+                "builtin_name": "google_search",
+                "is_enabled": True
+            }
+        ]
+        
+        return builtin_tools
     
     async def get_agent_name_suggestion(self, description: str) -> str:
         """Get AI-powered suggestion for agent name based on description"""
@@ -344,6 +363,16 @@ class ADKService:
                 else:
                     print(f"Failed to create function tool for: {tool_def.name}")
                     return False
+            elif tool_def.tool_type == ToolType.BUILTIN:
+                # Handle built-in tools
+                if tool_def.builtin_name == "google_search":
+                    adk_tool = google_search
+                else:
+                    print(f"Unknown built-in tool: {tool_def.builtin_name}")
+                    return False
+                
+                self.tools[tool_def.id] = adk_tool
+                return True
             else:
                 # Store the tool definition for non-function tools
                 self.tools[tool_def.id] = tool_def
