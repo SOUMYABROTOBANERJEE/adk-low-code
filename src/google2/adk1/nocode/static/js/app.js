@@ -29,6 +29,16 @@ class AgentGeniePlatform {
             });
         });
         
+        // Dashboard Quick Action buttons
+        document.getElementById('dashboardCreateAgentBtn')?.addEventListener('click', () => {
+            this.showSection('agents');
+            setTimeout(() => this.showModal('agentModal'), 100);
+        });
+        document.getElementById('dashboardCreateToolBtn')?.addEventListener('click', () => {
+            this.showSection('tools');
+            setTimeout(() => this.showModal('toolModal'), 100);
+        });
+        
         // Create buttons
         document.getElementById('createAgentBtn')?.addEventListener('click', () => this.showModal('agentModal'));
         document.getElementById('createToolBtn')?.addEventListener('click', () => this.showModal('toolModal'));
@@ -115,6 +125,11 @@ class AgentGeniePlatform {
     showModal(modalId) {
         document.getElementById(modalId)?.classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
+        
+        // Populate tools selection if opening agent modal
+        if (modalId === 'agentModal') {
+            this.populateAgentToolsSelection();
+        }
     }
     
     hideModal(modalId) {
@@ -438,10 +453,16 @@ class AgentGeniePlatform {
     
     async handleAgentSubmit(e) {
         e.preventDefault();
+        console.log('Agent form submitted');
         
         const formData = new FormData(e.target);
+        console.log('Form data:', Object.fromEntries(formData));
+        
+        // Generate a unique ID for new agents
+        const agentId = this.currentAgent?.id || this.generateAgentId();
+        
         const agentData = {
-            id: this.currentAgent?.id,
+            id: agentId,
             name: formData.get('agentName'),
             description: formData.get('agentDescription'),
             agent_type: formData.get('agentType'),
@@ -456,10 +477,14 @@ class AgentGeniePlatform {
             tags: []
         };
         
+        console.log('Agent data to send:', agentData);
+        
         try {
             this.showLoading(true);
             const url = this.currentAgent ? `/api/agents/${this.currentAgent.id}` : '/api/agents';
             const method = this.currentAgent ? 'PUT' : 'POST';
+            
+            console.log('Sending request to:', url, 'with method:', method);
             
             const response = await fetch(url, {
                 method: method,
@@ -467,7 +492,11 @@ class AgentGeniePlatform {
                 body: JSON.stringify(agentData)
             });
             
+            console.log('Response status:', response.status);
+            
             if (response.ok) {
+                const result = await response.json();
+                console.log('Success response:', result);
                 this.showMessage(`Agent ${this.currentAgent ? 'updated' : 'created'} successfully!`, 'success');
                 await this.loadAgents();
                 this.hideModal('agentModal');
@@ -475,6 +504,7 @@ class AgentGeniePlatform {
                 this.updateDashboardStats();
             } else {
                 const error = await response.json();
+                console.error('Error response:', error);
                 this.showMessage(`Error: ${error.detail}`, 'error');
             }
         } catch (error) {
@@ -793,6 +823,37 @@ class AgentGeniePlatform {
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('userEmail');
         window.location.href = '/login';
+    }
+    
+    generateAgentId() {
+        // Generate a unique ID for new agents
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        return `agent_${timestamp}_${random}`;
+    }
+    
+    populateAgentToolsSelection() {
+        const container = document.getElementById('agentToolsSelection');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (this.tools.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500">No tools available. Create tools first.</p>';
+            return;
+        }
+        
+        this.tools.forEach(tool => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center space-x-2 mb-2';
+            
+            div.innerHTML = `
+                <input type="checkbox" id="tool_${tool.id}" value="${tool.id}" class="rounded">
+                <label for="tool_${tool.id}" class="text-sm text-gray-700">${tool.name}</label>
+            `;
+            
+            container.appendChild(div);
+        });
     }
     
     // AI Suggestion Methods (keeping existing functionality)
