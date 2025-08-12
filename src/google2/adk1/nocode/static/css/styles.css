@@ -1,0 +1,190 @@
+/* Agent Genie - Tata Steel AI Platform Styles */
+
+/* Status Indicators */
+.status-indicator {
+    transition: all 0.3s ease;
+}
+
+.status-indicator.online {
+    background-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.status-indicator.offline {
+    background-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+/* Navigation Links */
+.nav-link {
+    transition: all 0.2s ease;
+}
+
+.nav-link.active {
+    background-color: #3b82f6;
+    color: white;
+}
+
+/* Modal Animations */
+.modal {
+    transition: opacity 0.3s ease;
+}
+
+.modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Loading Animation */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Message Styles */
+.message {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Tool and Agent Cards */
+.agent-card, .tool-card, .project-card {
+    transition: all 0.2s ease;
+}
+
+.agent-card:hover, .tool-card:hover, .project-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Chat Messages */
+.chat-message {
+    margin-bottom: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Form Focus States */
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Button Hover Effects */
+.btn-primary {
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Magic Wand Button */
+.magic-wand {
+    transition: all 0.2s ease;
+}
+
+.magic-wand:hover {
+    transform: scale(1.1);
+    color: #3b82f6;
+}
+
+/* Section Transitions */
+.section {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.section.hidden {
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+}
+
+/* Dashboard Stats */
+.stat-card {
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    backdrop-filter: blur(4px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .nav-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    
+    .modal {
+        margin: 1rem;
+        width: calc(100% - 2rem);
+    }
+    
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Logo Styling */
+.logo-tata-steel {
+    max-height: 100%;
+    width: auto;
+    object-fit: contain;
+}
+
+.logo-tata-steel:hover {
+    opacity: 0.9;
+    transition: opacity 0.2s ease;
+}

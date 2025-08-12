@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agent Genie | Tata Steel AI Platform</title>
+    <link rel="icon" type="image/png" href="/static/tata-steel-555x290.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
     <script>
         tailwind.config = {
             theme: {
@@ -39,9 +41,8 @@
             <div class="flex justify-between items-center h-16">
                 <!-- Logo and Brand -->
                 <div class="flex items-center space-x-4">
-                    <div class="h-10 w-10 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center">
-                        <i class="fas fa-robot text-white text-xl"></i>
-                    </div>
+                    <!-- Tata Steel Logo -->
+                    <img src="/static/tata-steel-555x290.png" alt="Tata Steel Logo" class="h-10 w-auto logo-tata-steel">
                     <div>
                         <h1 class="text-xl font-bold text-gray-900">Agent Genie</h1>
                         <p class="text-xs text-gray-500">Powered by Tata Steel AI</p>
@@ -77,6 +78,11 @@
                     </div>
                     
                     <div class="relative">
+                        <div id="adkStatus" class="flex items-center space-x-2 mr-4">
+                            <div class="w-3 h-3 rounded-full status-indicator online"></div>
+                            <span class="text-sm text-gray-600">ADK Available</span>
+                        </div>
+                        
                         <button id="userMenuBtn" class="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition-colors">
                             <div class="h-8 w-8 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
                                 <span class="text-white text-sm font-medium">D</span>
@@ -119,9 +125,8 @@
                         <p class="text-blue-100 text-lg">Powered by Tata Steel AI - Build amazing AI agents today!</p>
                     </div>
                     <div class="hidden md:block">
-                        <div class="h-20 w-20 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                            <i class="fas fa-rocket text-3xl"></i>
-                        </div>
+                        <!-- Tata Steel Logo in Welcome Section -->
+                        <img src="/static/tata-steel-555x290.png" alt="Tata Steel Logo" class="h-20 w-auto opacity-90 logo-tata-steel">
                     </div>
                 </div>
             </div>
@@ -135,7 +140,7 @@
                         </div>
                         <div class="ml-4">
                             <p class="text-sm font-medium text-gray-600">Total Agents</p>
-                            <p class="text-2xl font-bold text-gray-900" id="totalAgents">0</p>
+                            <p class="text-2xl font-bold text-gray-900" id="agentCount">0</p>
                         </div>
                     </div>
                 </div>
@@ -147,7 +152,7 @@
                         </div>
                         <div class="ml-4">
                             <p class="text-sm font-medium text-gray-600">Total Tools</p>
-                            <p class="text-2xl font-bold text-gray-900" id="totalTools">0</p>
+                            <p class="text-2xl font-bold text-gray-900" id="toolCount">0</p>
                         </div>
                     </div>
                 </div>
@@ -159,7 +164,7 @@
                         </div>
                         <div class="ml-4">
                             <p class="text-sm font-medium text-gray-600">Chat Sessions</p>
-                            <p class="text-2xl font-bold text-gray-900" id="totalSessions">0</p>
+                            <p class="text-2xl font-bold text-gray-900" id="chatCount">0</p>
                         </div>
                     </div>
                 </div>
@@ -171,7 +176,7 @@
                         </div>
                         <div class="ml-4">
                             <p class="text-sm font-medium text-gray-600">Projects</p>
-                            <p class="text-2xl font-bold text-gray-900" id="totalProjects">0</p>
+                            <p class="text-2xl font-bold text-gray-900" id="projectCount">0</p>
                         </div>
                     </div>
                 </div>
@@ -202,7 +207,7 @@
                             </div>
                         </button>
                         
-                        <button onclick="showSection('chat')" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                        <button data-section="chat" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
                             <div class="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
                                 <i class="fas fa-comment text-purple-600"></i>
                             </div>
@@ -230,7 +235,7 @@
         <div id="agents" class="section hidden">
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-2xl font-bold text-gray-900">AI Agents</h2>
-                <button onclick="openModal('agentModal')" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                <button id="createAgentBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     <i class="fas fa-plus mr-2"></i>Create Agent
                 </button>
             </div>
@@ -244,7 +249,7 @@
         <div id="tools" class="section hidden">
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-2xl font-bold text-gray-900">Tools</h2>
-                <button onclick="openModal('toolModal')" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                <button id="createToolBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     <i class="fas fa-plus mr-2"></i>Create Tool
                 </button>
             </div>
@@ -258,7 +263,7 @@
         <div id="projects" class="section hidden">
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-2xl font-bold text-gray-900">Projects</h2>
-                <button onclick="openModal('projectModal')" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                <button id="createProjectBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                     <i class="fas fa-plus mr-2"></i>Create Project
                 </button>
             </div>
@@ -273,10 +278,10 @@
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-2xl font-bold text-gray-900">Chat with Agents</h2>
                 <div class="flex space-x-2">
-                    <select id="agentSelector" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <select id="chatAgentSelect" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
                         <option value="">Select an agent...</option>
                     </select>
-                    <button onclick="clearChat()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    <button id="clearChatBtn" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
                         <i class="fas fa-trash mr-2"></i>Clear
                     </button>
                 </div>
@@ -297,9 +302,8 @@
                 
                 <div class="p-6 border-t border-gray-200">
                     <div class="flex space-x-3">
-                        <input type="text" id="chatInput" placeholder="Type your message..." 
-                               class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <button onclick="sendMessage()" class="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                        <input type="text" id="chatInput" placeholder="Type your message..." class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <button id="sendMessageBtn" class="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg font-medium transition-colors">
                             <i class="fas fa-paper-plane mr-2"></i>Send
                         </button>
                     </div>
@@ -315,12 +319,12 @@
             <div class="mt-3">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-medium text-gray-900">Create New Agent</h3>
-                    <button onclick="closeModal('agentModal')" class="text-gray-400 hover:text-gray-600">
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
                         <i class="fas fa-times text-xl"></i>
                     </button>
                 </div>
                 
-                <form id="agentForm" class="space-y-4">
+                <form id="agentConfigForm" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Agent Name</label>
@@ -337,7 +341,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">Agent Type</label>
                             <select id="agentType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
                                 <option value="llm">LLM Agent</option>
-                                <option value="workflow">Workflow Agent</option>
+
                                 <option value="sequential">Sequential Agent</option>
                                 <option value="parallel">Parallel Agent</option>
                             </select>
@@ -391,7 +395,118 @@
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">
-                        <button type="button" onclick="closeModal('agentModal')" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                        <button type="button" id="cancelAgentBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Create Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div id="agentModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Create New Agent</h3>
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="agentConfigForm" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Agent Name</label>
+                            <div class="relative">
+                                <input type="text" id="agentName" name="agentName" required
+                                       class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <button type="button" id="suggestAgentNameBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                    <i class="fas fa-magic"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Agent Type</label>
+                            <select id="agentType" name="agentType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="llm">LLM Agent</option>
+                                <option value="sequential">Sequential Agent</option>
+                                <option value="parallel">Parallel Agent</option>
+                                <option value="loop">Loop Agent</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <div class="relative">
+                            <textarea id="agentDescription" name="agentDescription" rows="2" required
+                                      class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                            <button type="button" id="suggestAgentDescriptionBtn" class="absolute right-2 top-2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">System Prompt</label>
+                        <div class="relative">
+                            <textarea id="agentSystemPrompt" name="agentSystemPrompt" rows="4" required
+                                      class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                            <button type="button" id="suggestAgentSystemPromptBtn" class="absolute right-2 top-2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                                            <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Instructions (Optional)</label>
+                            <textarea id="agentInstructions" name="agentInstructions" rows="2" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tools</label>
+                            <div id="agentToolsSelection" class="border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto">
+                                <!-- Tools will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                            <select id="agentModel" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="range" id="agentTemperature" min="0" max="2" step="0.1" value="0.7" class="flex-1">
+                                <span id="temperatureValue" class="text-sm text-gray-600 w-8">0.7</span>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Max Tokens</label>
+                            <input type="number" id="agentMaxTokens" value="1000" min="100" max="4000" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tools</label>
+                        <div id="agentToolsSelection" class="border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto">
+                            <!-- Tools will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" id="cancelAgentBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
                             Cancel
                         </button>
                         <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
@@ -409,7 +524,7 @@
             <div class="mt-3">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-medium text-gray-900">Create New Tool</h3>
-                    <button onclick="closeModal('toolModal')" class="text-gray-400 hover:text-gray-600">
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
                         <i class="fas fa-times text-xl"></i>
                     </button>
                 </div>
@@ -462,7 +577,7 @@
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">
-                        <button type="button" onclick="closeModal('toolModal')" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                        <button type="button" id="cancelToolBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
                             Cancel
                         </button>
                         <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
@@ -480,7 +595,7 @@
             <div class="mt-3">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-medium text-gray-900">Create New Project</h3>
-                    <button onclick="closeModal('projectModal')" class="text-gray-400 hover:text-gray-600">
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
                         <i class="fas fa-times text-xl"></i>
                     </button>
                 </div>
@@ -497,7 +612,7 @@
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">
-                        <button type="button" onclick="closeModal('projectModal')" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                        <button type="button" id="cancelProjectBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
                             Cancel
                         </button>
                         <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
