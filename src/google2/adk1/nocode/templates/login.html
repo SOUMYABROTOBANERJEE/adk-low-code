@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Agent Genie | Tata Steel AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4A90E2',
+                        secondary: '#7B68EE',
+                        accent: '#00D4AA',
+                        dark: '#1A1A2E',
+                        light: '#F8F9FA'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 min-h-screen">
+    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8">
+            <!-- Logo and Header -->
+            <div class="text-center">
+                <div class="mx-auto h-20 w-20 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center mb-6">
+                    <i class="fas fa-robot text-white text-3xl"></i>
+                </div>
+                <h2 class="text-4xl font-bold text-gray-900 mb-2">
+                    Agent Genie
+                </h2>
+                <p class="text-lg text-gray-600">
+                    Powered by Tata Steel AI
+                </p>
+            </div>
+
+            <!-- Login Form -->
+            <div class="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
+                <form class="space-y-6" id="loginForm">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-envelope mr-2 text-primary"></i>
+                            Email Address
+                        </label>
+                        <input id="email" name="email" type="email" required 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200"
+                               placeholder="Enter your email">
+                    </div>
+                    
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-lock mr-2 text-primary"></i>
+                            Password
+                        </label>
+                        <input id="password" name="password" type="password" required 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200"
+                               placeholder="Enter your password">
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <input id="remember-me" name="remember-me" type="checkbox" 
+                                   class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded">
+                            <label for="remember-me" class="ml-2 block text-sm text-gray-700">
+                                Remember me
+                            </label>
+                        </div>
+                        <a href="#" class="text-sm text-primary hover:text-secondary transition-colors">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <div>
+                        <button type="submit" 
+                                class="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 px-4 rounded-lg font-medium hover:from-secondary hover:to-primary transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                            <i class="fas fa-sign-in-alt mr-2"></i>
+                            Sign In
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Demo Credentials -->
+                <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 class="text-sm font-medium text-blue-800 mb-2">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Demo Credentials
+                    </h4>
+                    <div class="text-xs text-blue-700 space-y-1">
+                        <div><strong>Email:</strong> demo@adk.com</div>
+                        <div><strong>Password:</strong> demo123</div>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="mt-6">
+                    <div class="relative">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-gray-300"></div>
+                        </div>
+                        <div class="relative flex justify-center text-sm">
+                            <span class="px-2 bg-white text-gray-500">Or continue with</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Social Login -->
+                <div class="mt-6 grid grid-cols-2 gap-3">
+                    <button class="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+                        <i class="fab fa-google text-red-500 mr-2"></i>
+                        Google
+                    </button>
+                    <button class="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors">
+                        <i class="fab fa-github text-gray-700 mr-2"></i>
+                        GitHub
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="text-center text-sm text-gray-600">
+                <p>Don't have an account? 
+                    <a href="#" class="text-primary hover:text-secondary font-medium transition-colors">
+                        Sign up
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            // Simple demo validation
+            if (email === 'demo@adk.com' && password === 'demo123') {
+                // Store login state
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('userEmail', email);
+                
+                // Redirect to main platform
+                window.location.href = '/';
+            } else {
+                alert('Invalid credentials. Use demo@adk.com / demo123');
+            }
+        });
+
+        // Check if already logged in
+        if (localStorage.getItem('isLoggedIn') === 'true') {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>

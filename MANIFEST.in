@@ -1,5 +1,0 @@
-include README.md
-include LICENSE
-recursive-include src/google/adk/nocode/templates *.html
-recursive-include src/google/adk/nocode/static/css *.css
-recursive-include src/google/adk/nocode/static/js *.js

@@ -1,21 +1,22 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-Development server for Google ADK No-Code Platform.
-This script allows running the ADK platform directly from the source code.
+Google ADK No-Code Platform
+Main entry point for running the platform
 """
 
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv('.env')
 
 # Add the src directory to the Python path
 src_dir = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_dir))
 
 from src.google2.adk1.nocode.main import app
-from dotenv import load_dotenv
-
-load_dotenv('config.env')
 
 if __name__ == "__main__":
     import uvicorn
@@ -25,4 +26,10 @@ if __name__ == "__main__":
     print("📖 Press Ctrl+C to stop the server")
     print()
     
-    uvicorn.run(app, host="127.0.0.1", port=8080, reload=False)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8080,
+        log_level="info",
+        reload=False  # Set to True for development
+    )

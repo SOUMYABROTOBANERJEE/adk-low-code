@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Genie | Tata Steel AI Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4A90E2',
+                        secondary: '#7B68EE',
+                        accent: '#00D4AA',
+                        dark: '#1A1A2E',
+                        light: '#F8F9FA',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        error: '#EF4444'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Login Check -->
+    <script>
+        if (localStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = '/login';
+        }
+    </script>
+
+    <!-- Navigation Header -->
+    <nav class="bg-white shadow-lg border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo and Brand -->
+                <div class="flex items-center space-x-4">
+                    <div class="h-10 w-10 bg-gradient-to-r from-primary to-secondary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-robot text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">Agent Genie</h1>
+                        <p class="text-xs text-gray-500">Powered by Tata Steel AI</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Menu -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#dashboard" class="nav-link active" data-section="dashboard">
+                        <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                    </a>
+                    <a href="#agents" class="nav-link" data-section="agents">
+                        <i class="fas fa-robot mr-2"></i>Agents
+                    </a>
+                    <a href="#tools" class="nav-link" data-section="tools">
+                        <i class="fas fa-tools mr-2"></i>Tools
+                    </a>
+                    <a href="#projects" class="nav-link" data-section="projects">
+                        <i class="fas fa-project-diagram mr-2"></i>Projects
+                    </a>
+                    <a href="#chat" class="nav-link" data-section="chat">
+                        <i class="fas fa-comments mr-2"></i>Chat
+                    </a>
+                </div>
+
+                <!-- User Menu -->
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <button id="notificationsBtn" class="p-2 text-gray-400 hover:text-gray-600 transition-colors relative">
+                            <i class="fas fa-bell text-lg"></i>
+                            <span class="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+                        </button>
+                    </div>
+                    
+                    <div class="relative">
+                        <button id="userMenuBtn" class="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition-colors">
+                            <div class="h-8 w-8 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-medium">D</span>
+                            </div>
+                            <span class="hidden md:block text-sm font-medium">Tata Steel User</span>
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </button>
+                        
+                        <!-- User Dropdown -->
+                        <div id="userDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-user mr-2"></i>Profile
+                            </a>
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-cog mr-2"></i>Settings
+                            </a>
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                <i class="fas fa-question-circle mr-2"></i>Help
+                            </a>
+                            <hr class="my-1">
+                            <a href="#" id="logoutBtn" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                <i class="fas fa-sign-out-alt mr-2"></i>Sign Out
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Dashboard Section -->
+        <div id="dashboard" class="section active">
+            <!-- Welcome Header -->
+            <div class="bg-gradient-to-r from-primary to-secondary rounded-2xl p-8 text-white mb-8">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold mb-2">Welcome to Agent Genie! 👋</h1>
+                        <p class="text-blue-100 text-lg">Powered by Tata Steel AI - Build amazing AI agents today!</p>
+                    </div>
+                    <div class="hidden md:block">
+                        <div class="h-20 w-20 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                            <i class="fas fa-rocket text-3xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-robot text-blue-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Total Agents</p>
+                            <p class="text-2xl font-bold text-gray-900" id="totalAgents">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-tools text-green-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Total Tools</p>
+                            <p class="text-2xl font-bold text-gray-900" id="totalTools">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-comments text-purple-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Chat Sessions</p>
+                            <p class="text-2xl font-bold text-gray-900" id="totalSessions">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-project-diagram text-orange-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-600">Projects</p>
+                            <p class="text-2xl font-bold text-gray-900" id="totalProjects">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                    <div class="space-y-3">
+                        <button onclick="showSection('agents')" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                            <div class="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-plus text-blue-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium">Create New Agent</p>
+                                <p class="text-sm text-gray-500">Build a new AI agent</p>
+                            </div>
+                        </button>
+                        
+                        <button onclick="showSection('tools')" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                            <div class="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-plus text-green-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium">Create New Tool</p>
+                                <p class="text-sm text-gray-500">Build a custom tool</p>
+                            </div>
+                        </button>
+                        
+                        <button onclick="showSection('chat')" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                            <div class="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-comment text-purple-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium">Start Chat</p>
+                                <p class="text-sm text-gray-500">Test your agents</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+                    <div class="space-y-3" id="recentActivity">
+                        <div class="flex items-center text-sm text-gray-600">
+                            <div class="h-2 w-2 bg-blue-500 rounded-full mr-3"></div>
+                            <span>No recent activity</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agents Section -->
+        <div id="agents" class="section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">AI Agents</h2>
+                <button onclick="openModal('agentModal')" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Create Agent
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="agentsGrid">
+                <!-- Agents will be populated here -->
+            </div>
+        </div>
+
+        <!-- Tools Section -->
+        <div id="tools" class="section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Tools</h2>
+                <button onclick="openModal('toolModal')" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Create Tool
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="toolsGrid">
+                <!-- Tools will be populated here -->
+            </div>
+        </div>
+
+        <!-- Projects Section -->
+        <div id="projects" class="section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Projects</h2>
+                <button onclick="openModal('projectModal')" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Create Project
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="projectsGrid">
+                <!-- Projects will be populated here -->
+            </div>
+        </div>
+
+        <!-- Chat Section -->
+        <div id="chat" class="section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Chat with Agents</h2>
+                <div class="flex space-x-2">
+                    <select id="agentSelector" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Select an agent...</option>
+                    </select>
+                    <button onclick="clearChat()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-trash mr-2"></i>Clear
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="p-6 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Chat Interface</h3>
+                    <p class="text-sm text-gray-600">Select an agent and start chatting!</p>
+                </div>
+                
+                <div class="h-96 overflow-y-auto p-6" id="chatMessages">
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fas fa-comments text-4xl mb-4"></i>
+                        <p>Select an agent to start chatting</p>
+                    </div>
+                </div>
+                
+                <div class="p-6 border-t border-gray-200">
+                    <div class="flex space-x-3">
+                        <input type="text" id="chatInput" placeholder="Type your message..." 
+                               class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <button onclick="sendMessage()" class="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                            <i class="fas fa-paper-plane mr-2"></i>Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Agent Modal -->
+    <div id="agentModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Create New Agent</h3>
+                    <button onclick="closeModal('agentModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="agentForm" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Agent Name</label>
+                            <div class="relative">
+                                <input type="text" id="agentName" required
+                                       class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <button type="button" id="suggestAgentNameBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                    <i class="fas fa-magic"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Agent Type</label>
+                            <select id="agentType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="llm">LLM Agent</option>
+                                <option value="workflow">Workflow Agent</option>
+                                <option value="sequential">Sequential Agent</option>
+                                <option value="parallel">Parallel Agent</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <div class="relative">
+                            <textarea id="agentDescription" rows="2" required
+                                      class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                            <button type="button" id="suggestAgentDescriptionBtn" class="absolute right-2 top-2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">System Prompt</label>
+                        <div class="relative">
+                            <textarea id="agentSystemPrompt" rows="4" required
+                                      class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                            <button type="button" id="suggestAgentSystemPromptBtn" class="absolute right-2 top-2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                            <select id="agentModel" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="range" id="agentTemperature" min="0" max="1" step="0.1" value="0.7" class="flex-1">
+                                <span id="temperatureValue" class="text-sm text-gray-600 w-12">0.7</span>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Max Tokens</label>
+                            <input type="number" id="agentMaxTokens" value="1000" min="100" max="8000" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeModal('agentModal')" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Create Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tool Modal -->
+    <div id="toolModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Create New Tool</h3>
+                    <button onclick="closeModal('toolModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="toolForm" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tool Name</label>
+                            <div class="relative">
+                                <input type="text" id="toolName" required
+                                       class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <button type="button" id="suggestToolNameBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                    <i class="fas fa-magic"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tool Type</label>
+                            <select id="toolType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="function">Function Tool</option>
+                                <option value="builtin">Built-in Tool</option>
+                                <option value="google_cloud">Google Cloud Tool</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <div class="relative">
+                            <textarea id="toolDescription" rows="2" required
+                                      class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                            <button type="button" id="suggestToolDescriptionBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="functionCodeSection" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Function Code</label>
+                        <div class="relative">
+                            <textarea id="toolFunctionCode" rows="8"
+                                      class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                                      placeholder="def execute(input_data):&#10;    # Your tool logic here&#10;    return result"></textarea>
+                            <button type="button" id="suggestToolCodeBtn" class="absolute right-2 top-2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Write a Python function that will be executed when the tool is called.</p>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeModal('toolModal')" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Create Tool
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Modal -->
+    <div id="projectModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Create New Project</h3>
+                    <button onclick="closeModal('projectModal')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="projectForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                        <input type="text" id="projectName" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea id="projectDescription" rows="3" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" onclick="closeModal('projectModal')" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Create Project
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    <div id="messageContainer" class="fixed top-4 right-4 z-50"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
+            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            <span class="text-gray-700">Loading...</span>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
