@@ -46,6 +46,28 @@ A powerful, production-ready platform for building and deploying AI agents using
 - **Auto-scaling**: Handles traffic spikes automatically
 - **Health Monitoring**: Built-in health checks and logging
 
+## 🏗️ Project Structure
+
+```
+adk-low-code/
+├── src/                    # Main source code
+│   └── google2/adk1/nocode/
+│       ├── main.py        # FastAPI application
+│       ├── models.py      # Pydantic models
+│       ├── adk_service.py # Google ADK integration
+│       ├── static/        # Frontend assets (CSS, JS)
+│       └── templates/     # HTML templates
+├── unit_test/             # Testing and development utilities
+│   ├── check_db.py        # Database testing
+│   ├── test_platform.py   # Platform functionality testing
+│   ├── start_platform.py  # Startup testing
+│   └── add_updated_at.py  # Database migration utilities
+├── app.py                 # Main entry point
+├── requirements.txt       # Python dependencies
+├── Dockerfile            # Container configuration
+└── README.md             # This file
+```
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -79,20 +101,20 @@ A powerful, production-ready platform for building and deploying AI agents using
 
 5. **Run the platform**
    ```bash
-   python -c "import sys; sys.path.insert(0, 'src'); from google2.adk1.nocode.main import app; import uvicorn; uvicorn.run(app, host='127.0.0.1', port=8081)"
+   python app.py
    ```
 
 6. **Open your browser**
-   Navigate to `http://localhost:8081`
+   Navigate to `http://127.0.0.1:8083`
 
 ### Authentication (Quick test)
 
 ```bash
-curl -X POST http://localhost:8081/api/auth/register \
+curl -X POST http://127.0.0.1:8083/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","name":"User","password":"secret123"}'
 
-curl -X POST http://localhost:8081/api/auth/login \
+curl -X POST http://127.0.0.1:8083/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
 ```
@@ -237,18 +259,28 @@ Optional (Langfuse Observability):
 
 ## 🧪 Testing
 
+### Test Structure
+The project includes a comprehensive testing suite organized in the `unit_test/` folder:
+
+- **`unit_test/check_db.py`**: Database connectivity and schema verification
+- **`unit_test/test_platform.py`**: Platform functionality testing
+- **`unit_test/start_platform.py`**: Platform startup and configuration testing
+- **`unit_test/add_updated_at.py`**: Database migration utilities
+
+See [unit_test/README.md](unit_test/README.md) for detailed testing documentation.
+
 ### API Testing
 ```bash
 # Test health endpoint
-curl http://localhost:8081/api/health
+curl http://127.0.0.1:8083/api/health
 
 # Test tool creation
-curl -X POST http://localhost:8081/api/tools \
+curl -X POST http://127.0.0.1:8083/api/tools \
   -H "Content-Type: application/json" \
   -d '{"name":"Test Tool","description":"A test tool","tool_type":"function"}'
 
 # Test agent creation
-curl -X POST http://localhost:8081/api/agents \
+curl -X POST http://127.0.0.1:8083/api/agents \
   -H "Content-Type: application/json" \
   -d '{"name":"Test_Agent","description":"A test agent","agent_type":"llm"}'
 ```
