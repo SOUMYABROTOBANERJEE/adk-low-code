@@ -5,6 +5,7 @@ Data models for the Google ADK No-Code Platform
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, validator
 from enum import Enum
+from datetime import datetime
 
 
 class ToolType(str, Enum):
@@ -15,6 +16,29 @@ class ToolType(str, Enum):
     MCP = "mcp"
     OPENAPI = "openapi"
     CUSTOM = "custom"
+
+
+class User(BaseModel):
+    """User model for authentication and tracking"""
+    id: str = Field(..., description="Unique identifier for the user")
+    email: str = Field(..., description="User's email address")
+    name: str = Field(..., description="User's display name")
+    password_hash: str = Field(..., description="Hashed password for authentication")
+    is_active: bool = Field(default=True, description="Whether the user account is active")
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="When the user was created")
+    last_login: Optional[str] = Field(None, description="Last login timestamp")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional user metadata")
+
+class UserSession(BaseModel):
+    """User session for tracking and authentication"""
+    id: str = Field(..., description="Unique session identifier")
+    user_id: str = Field(..., description="Associated user ID")
+    session_token: str = Field(..., description="Session authentication token")
+    expires_at: str = Field(..., description="When the session expires")
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Session creation time")
+    last_activity: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Last activity timestamp")
+    user_agent: Optional[str] = Field(None, description="User agent string")
+    ip_address: Optional[str] = Field(None, description="IP address of the session")
 
 
 class AgentType(str, Enum):
@@ -49,7 +73,11 @@ class ToolDefinition(BaseModel):
     is_enabled: bool = Field(default=True, description="Whether the tool is enabled")
     
     @validator('function_code')
-    def validate_function_code(cls, v):
+    def validate_function_code(cls, v, values):
+        # If this is a function tool, function_code is required
+        if values.get('tool_type') == ToolType.FUNCTION and not v:
+            raise ValueError("function_code is required for function tools")
+        
         if v is not None:
             # Basic validation that it's valid Python code
             try:
@@ -136,6 +164,7 @@ class ChatMessage(BaseModel):
     role: str = Field(..., description="Role of the message sender (user/assistant)")
     content: str = Field(..., description="Content of the message")
     timestamp: str = Field(..., description="Timestamp of the message")
+    user_id: Optional[str] = Field(None, description="User ID who sent the message")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
@@ -184,6 +213,24 @@ class ProjectConfiguration(BaseModel):
     created_at: Optional[str] = Field(None, description="Creation timestamp")
     updated_at: Optional[str] = Field(None, description="Last update timestamp")
 
+
+class LoginRequest(BaseModel):
+    """Request model for user login"""
+    email: str = Field(..., description="User's email address")
+    password: str = Field(..., description="User's password")
+
+class RegisterRequest(BaseModel):
+    """Request model for user registration"""
+    email: str = Field(..., description="User's email address")
+    name: str = Field(..., description="User's display name")
+    password: str = Field(..., description="User's password")
+
+class AuthResponse(BaseModel):
+    """Response model for authentication"""
+    success: bool = Field(..., description="Whether authentication was successful")
+    user: Optional[User] = Field(None, description="User information if successful")
+    session_token: Optional[str] = Field(None, description="Session token if successful")
+    message: str = Field(..., description="Response message")
 
 class AgentUpdateRequest(BaseModel):
     """Request model for updating an agent (ID not required)"""

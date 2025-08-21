@@ -6,28 +6,40 @@
 }
 
 .status-indicator.online {
-    background-color: #10b981;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    /* Use accent color from theme (#00D4AA) */
+    background-color: #00D4AA;
+    box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2);
 }
 
 .status-indicator.offline {
-    background-color: #ef4444;
+    background-color: #EF4444;
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
 /* Navigation Links */
 .nav-link {
     transition: all 0.2s ease;
+    padding: 0.4rem 0.65rem;
+    border-radius: 0.5rem;
 }
 
 .nav-link.active {
-    background-color: #3b82f6;
-    color: white;
+    /* Gradient from primary (#4A90E2) to secondary (#7B68EE) */
+    background-image: linear-gradient(90deg, #4A90E2, #7B68EE);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.25);
+}
+
+.nav-link:hover {
+    background-color: rgba(74, 144, 226, 0.10);
+    color: #1f2937; /* slightly darker text on hover */
 }
 
 /* Modal Animations */
 .modal {
     transition: opacity 0.3s ease;
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .modal.hidden {

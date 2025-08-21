@@ -27,3 +27,6 @@ flake8>=6.1.0
 pyyaml>=6.0.1
 jsonschema>=4.19.0
 
+# Observability and Monitoring
+langfuse>=2.0.0
+

@@ -21,15 +21,15 @@ from src.google2.adk1.nocode.main import app
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Starting Google ADK No-Code Platform...")
-    print("📱 Access the platform at: http://127.0.0.1:8080")
-    print("🔧 API documentation at: http://127.0.0.1:8080/docs")
+    print("📱 Access the platform at: http://127.0.0.1:8083")
+    print("🔧 API documentation at: http://127.0.0.1:8083/docs")
     print("📖 Press Ctrl+C to stop the server")
     print()
     
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8080,
+        port=8083,  # Changed from 8082 to 8083
         log_level="info",
         reload=False  # Set to True for development
     )

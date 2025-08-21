@@ -14,13 +14,18 @@ class AgentGeniePlatform {
     }
     
     init() {
+        console.log('Initializing AgentGeniePlatform...');
         this.bindEvents();
+        console.log('Events bound, loading initial data...');
         this.loadInitialData();
         this.checkADKStatus();
         this.showSection('dashboard'); // Show dashboard by default
+        console.log('Initialization complete');
     }
     
     bindEvents() {
+        console.log('Binding events...');
+        
         // Navigation buttons
         document.querySelectorAll('[data-section]').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -40,9 +45,19 @@ class AgentGeniePlatform {
         });
         
         // Create buttons
-        document.getElementById('createAgentBtn')?.addEventListener('click', () => this.showModal('agentModal'));
-        document.getElementById('createToolBtn')?.addEventListener('click', () => this.showModal('toolModal'));
-        document.getElementById('createProjectBtn')?.addEventListener('click', () => this.showModal('projectModal'));
+        const createAgentBtn = document.getElementById('createAgentBtn');
+        const createToolBtn = document.getElementById('createToolBtn');
+        const createProjectBtn = document.getElementById('createProjectBtn');
+        
+        console.log('Create buttons found:', {
+            createAgentBtn: !!createAgentBtn,
+            createToolBtn: !!createToolBtn,
+            createProjectBtn: !!createProjectBtn
+        });
+        
+        createAgentBtn?.addEventListener('click', () => this.showModal('agentModal'));
+        createToolBtn?.addEventListener('click', () => this.showModal('toolModal'));
+        createProjectBtn?.addEventListener('click', () => this.showModal('projectModal'));
         
         // Modal close buttons
         document.querySelectorAll('.modal-close').forEach(btn => {
@@ -83,6 +98,10 @@ class AgentGeniePlatform {
         document.getElementById('suggestToolNameBtn')?.addEventListener('click', () => this.suggestToolName());
         document.getElementById('suggestToolDescriptionBtn')?.addEventListener('click', () => this.suggestToolDescription());
         document.getElementById('suggestToolCodeBtn')?.addEventListener('click', () => this.suggestToolCode());
+        document.getElementById('generateToolCodeBtn')?.addEventListener('click', () => this.generateToolCode());
+        
+        // Notifications
+        document.getElementById('notificationsBtn')?.addEventListener('click', () => this.handleNotifications());
         
         // Logout
         document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
@@ -130,11 +149,45 @@ class AgentGeniePlatform {
         if (modalId === 'agentModal') {
             this.populateAgentToolsSelection();
         }
+        
+        // Show function code section by default when opening tool modal
+        if (modalId === 'toolModal') {
+            const functionSection = document.getElementById('functionCodeSection');
+            const toolType = document.getElementById('toolType');
+            
+            // Since "function" is the default value, show the section
+            if (functionSection && toolType?.value === 'function') {
+                functionSection.classList.remove('hidden');
+            }
+        }
     }
     
     hideModal(modalId) {
         document.getElementById(modalId)?.classList.add('hidden');
         document.body.classList.remove('overflow-hidden');
+        
+        // Reset forms when closing modals
+        if (modalId === 'toolModal') {
+            const form = document.getElementById('toolForm');
+            if (form) {
+                form.reset();
+                // Hide function code section after reset
+                const functionSection = document.getElementById('functionCodeSection');
+                if (functionSection) {
+                    functionSection.classList.add('hidden');
+                }
+            }
+        } else if (modalId === 'agentModal') {
+            const form = document.getElementById('agentConfigForm');
+            if (form) {
+                form.reset();
+            }
+        } else if (modalId === 'projectModal') {
+            const form = document.getElementById('projectForm');
+            if (form) {
+                form.reset();
+            }
+        }
     }
     
     hideAllModals() {
@@ -153,11 +206,32 @@ class AgentGeniePlatform {
                 this.loadProjects()
             ]);
             this.updateDashboardStats();
+            this.updateUserDisplay();
             this.showLoading(false);
         } catch (error) {
             console.error('Error loading initial data:', error);
             this.showMessage('Error loading data. Please refresh the page.', 'error');
             this.showLoading(false);
+        }
+    }
+    
+    updateUserDisplay() {
+        // Update user display name from localStorage
+        const userEmail = localStorage.getItem('userEmail');
+        const userDisplayName = document.getElementById('userDisplayName');
+        const userAvatar = document.querySelector('#userMenuBtn .h-8.w-8 span');
+        
+        if (userEmail && userDisplayName) {
+            // Extract name from email (before @ symbol)
+            const name = userEmail.split('@')[0];
+            // Capitalize first letter
+            const displayName = name.charAt(0).toUpperCase() + name.slice(1);
+            userDisplayName.textContent = displayName;
+            
+            // Update avatar initial
+            if (userAvatar) {
+                userAvatar.textContent = displayName.charAt(0).toUpperCase();
+            }
         }
     }
     
@@ -201,6 +275,33 @@ class AgentGeniePlatform {
                 indicator.className = 'w-3 h-3 rounded-full status-indicator offline';
                 text.textContent = 'Connection Error';
             }
+        }
+        
+        // Check for notifications (simulate for demo)
+        this.checkNotifications();
+    }
+    
+    checkNotifications() {
+        // For demo purposes, randomly show/hide notification dot
+        // In production, this would check actual notifications
+        const notificationDot = document.getElementById('notificationDot');
+        if (notificationDot) {
+            // Simulate notifications - you can replace this with actual logic
+            const hasNotifications = Math.random() > 0.7; // 30% chance of having notifications
+            if (hasNotifications) {
+                notificationDot.classList.remove('hidden');
+            } else {
+                notificationDot.classList.add('hidden');
+            }
+        }
+    }
+    
+    handleNotifications() {
+        // Clear notification dot when bell is clicked
+        const notificationDot = document.getElementById('notificationDot');
+        if (notificationDot) {
+            notificationDot.classList.add('hidden');
+            this.showMessage('Notifications cleared', 'info');
         }
     }
     
@@ -518,12 +619,21 @@ class AgentGeniePlatform {
     async handleToolSubmit(e) {
         e.preventDefault();
         
-        const formData = new FormData(e.target);
+        const toolType = document.getElementById('toolType').value;
+        const functionCode = document.getElementById('toolFunctionCode')?.value;
+        
+        // Validate function code is provided for function tools
+        if (toolType === 'function' && !functionCode?.trim()) {
+            this.showMessage('Function code is required for function tools', 'error');
+            return;
+        }
+        
         const toolData = {
-            name: formData.get('toolName'),
-            description: formData.get('toolDescription'),
-            tool_type: formData.get('toolType'),
-            function_code: document.getElementById('toolFunctionCode')?.value || null,
+            id: document.getElementById('toolId').value,
+            name: document.getElementById('toolName').value,
+            description: document.getElementById('toolDescription').value,
+            tool_type: toolType,
+            function_code: functionCode || null,
             tags: []
         };
         
@@ -1044,9 +1154,70 @@ class AgentGeniePlatform {
             this.showMessage('Error getting AI code suggestion', 'error');
         }
     }
+    
+    async generateToolCode() {
+        const name = document.getElementById('toolName')?.value;
+        const description = document.getElementById('toolDescription')?.value;
+        const toolType = document.getElementById('toolType')?.value;
+        
+        if (!name?.trim() || !description?.trim()) {
+            this.showMessage('Please enter both name and description first to generate code', 'warning');
+            return;
+        }
+        
+        if (toolType !== 'function') {
+            this.showMessage('Code generation is only available for function tools', 'warning');
+            return;
+        }
+        
+        try {
+            this.showLoading(true);
+            const response = await fetch('/api/suggestions/tool/code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    name: name.trim(), 
+                    description: description.trim(), 
+                    tool_type: toolType 
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                const codeField = document.getElementById('toolFunctionCode');
+                if (codeField) {
+                    codeField.value = data.suggestion;
+                    this.showMessage('Python code generated successfully!', 'success');
+                }
+            } else {
+                this.showMessage('Failed to generate Python code', 'error');
+            }
+        } catch (error) {
+            console.error('Error generating tool code:', error);
+            this.showMessage('Error generating Python code', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
 }
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new AgentGeniePlatform();
+    console.log('DOM loaded, initializing AgentGeniePlatform...');
+    try {
+        window.app = new AgentGeniePlatform();
+        console.log('AgentGeniePlatform initialized successfully');
+        
+        // Test if the create tool button exists
+        const createToolBtn = document.getElementById('createToolBtn');
+        console.log('Create Tool Button found:', createToolBtn);
+        
+        if (createToolBtn) {
+            console.log('Button text:', createToolBtn.textContent);
+            console.log('Button classes:', createToolBtn.className);
+        }
+        
+    } catch (error) {
+        console.error('Error initializing AgentGeniePlatform:', error);
+    }
 });

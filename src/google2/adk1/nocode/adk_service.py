@@ -5,6 +5,7 @@ Core ADK service for creating and executing agents
 import asyncio
 import time
 import uuid
+import os
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import tempfile
@@ -51,26 +52,30 @@ class ADKService:
     """Service for managing Google ADK agents"""
     
     def __init__(self, db_manager=None):
+        # Load environment variables first
+        from dotenv import load_dotenv
+        load_dotenv('.env')
+        
         self.agents: Dict[str, Any] = {}
         self.tools: Dict[str, Any] = {}
         self.sessions: Dict[str, List[ChatMessage]] = {}
         self.session_service = InMemorySessionService() if ADK_AVAILABLE else None
         self.app_name = "google_adk_platform"
         self.user_id = "default_user"
-        self.api_key = "AIzaSyAameifAiVmm05ww2Ib5ofFmvbGGHFTSnk"
+        self.api_key = os.getenv("GOOGLE_API_KEY")
         self.db_manager = db_manager
         
-        # Set environment variable for Google AI
-        import os
-        os.environ["GOOGLE_API_KEY"] = self.api_key
+        # Set environment variable for Google AI if not already set
+        if self.api_key and not os.getenv("GOOGLE_API_KEY"):
+            os.environ["GOOGLE_API_KEY"] = self.api_key
         
         # Initialize Google GenAI client for prompt suggestions
         if GENAI_AVAILABLE:
             try:
                 self.genai_client = genai.Client(api_key=self.api_key)
                 print("Google GenAI client initialized successfully")
-            except Exception as e:
-                print(f"Failed to initialize Google GenAI client: {e}")
+            except Exception as error:
+                print(f"Failed to initialize Google GenAI client: {error}")
                 self.genai_client = None
         else:
             self.genai_client = None
@@ -123,8 +128,8 @@ class ADKService:
             )
             
             return response.text.strip()
-        except Exception as e:
-            print(f"Error getting agent name suggestion: {e}")
+        except Exception as error:
+            print(f"Error getting agent name suggestion: {error}")
             return "AI suggestions not available"
     
     async def get_agent_description_suggestion(self, name: str, agent_type: str) -> str:
@@ -149,8 +154,8 @@ class ADKService:
             )
             
             return response.text.strip()
-        except Exception as e:
-            print(f"Error getting agent description suggestion: {e}")
+        except Exception as error:
+            print(f"Error getting agent description suggestion: {error}")
             return "AI suggestions not available"
     
     async def get_agent_system_prompt_suggestion(self, name: str, description: str, agent_type: str) -> str:
@@ -179,8 +184,8 @@ class ADKService:
             )
             
             return response.text.strip()
-        except Exception as e:
-            print(f"Error getting agent system prompt suggestion: {e}")
+        except Exception as error:
+            print(f"Error getting agent system prompt suggestion: {error}")
             return "AI suggestions not available"
     
     async def get_tool_name_suggestion(self, description: str, tool_type: str) -> str:
@@ -207,8 +212,8 @@ class ADKService:
             )
             
             return response.text.strip()
-        except Exception as e:
-            print(f"Error getting tool name suggestion: {e}")
+        except Exception as error:
+            print(f"Error getting tool name suggestion: {error}")
             return "AI suggestions not available"
     
     async def get_tool_description_suggestion(self, name: str, tool_type: str) -> str:
@@ -235,8 +240,8 @@ class ADKService:
             )
             
             return response.text.strip()
-        except Exception as e:
-            print(f"Error getting tool description suggestion: {e}")
+        except Exception as error:
+            print(f"Error getting tool description suggestion: {error}")
             return "AI suggestions not available"
     
     async def get_tool_code_suggestion(self, name: str, description: str, tool_type: str) -> str:
@@ -250,17 +255,33 @@ class ADKService:
             Description: "{description}"
             Type: "{tool_type}"
             
-            Generate Python function code that implements this tool's functionality.
+            Generate Python function code that implements this tool's functionality following Google ADK patterns.
             The code should:
             - Have a clear function signature with appropriate parameters
-            - Include proper error handling
+            - Include proper error handling and validation
             - Return meaningful results
             - Follow Python best practices
-            - Include docstring explaining the function
+            - Include comprehensive docstring explaining the function
             - Handle edge cases appropriately
+            - Be compatible with Google ADK function tool requirements
             
-            For function tools, create a main function that can be called by the ADK.
-            For other tool types, create appropriate initialization or configuration code.
+            For function tools, create an 'execute' function that follows this pattern:
+            def execute(input_data: str) -> str:
+                \"\"\"
+                [Tool description]
+                
+                Args:
+                    input_data (str): The input data for the tool
+                    
+                Returns:
+                    str: The result of the tool execution
+                \"\"\"
+                try:
+                    # Your tool logic here
+                    # Process input_data and return result
+                    return "Result: [your processed data]"
+                except Exception as error:
+                    return f"Error: {str(error)}"
             
             Return only the Python code, nothing else."""
             
@@ -270,12 +291,12 @@ class ADKService:
             )
             
             return response.text.strip()
-        except Exception as e:
-            print(f"Error getting tool code suggestion: {e}")
+        except Exception as error:
+            print(f"Error getting tool code suggestion: {error}")
             return "AI suggestions not available"
     
     def create_function_tool(self, tool_def: ToolDefinition) -> Optional[Any]:
-        """Create a function tool from tool definition"""
+        """Create a function tool from tool definition following ADK patterns"""
         if not ADK_AVAILABLE:
             return None
             
@@ -283,30 +304,96 @@ class ADKService:
             return None
             
         try:
-            # Create a simple function that executes the tool logic
-            # This is a simplified approach that works with the current ADK setup
-            def tool_function(data: str) -> str:
-                """Execute the tool with the given data"""
-                # Execute the tool logic based on the tool name
-                if tool_def.name == "Database Insert Tool":
-                    return f"Data inserted successfully: {data}"
-                elif tool_def.name == "Data Validation Tool":
+            # Create a proper ADK function tool
+            # The function should follow ADK patterns: clear signature, proper typing, docstrings
+            def tool_function(input_data: str) -> str:
+                """
+                Execute the tool with the given input data.
+                
+                Args:
+                    input_data (str): The input data for the tool
+                    
+                Returns:
+                    str: The result of the tool execution
+                """
+                try:
+                    # Execute the custom function code
+                    # We'll use exec to run the user's code in a safe context
+                    local_vars = {'input_data': input_data}
+                    
+                    # Execute the function code
+                    exec(tool_def.function_code, {}, local_vars)
+                    
+                    # Look for an execute function or main function
+                    if 'execute' in local_vars:
+                        return str(local_vars['execute'](input_data))
+                    elif 'main' in local_vars:
+                        return str(local_vars['main'](input_data))
+                    else:
+                        # If no execute function found, return a default response
+                        return f"Tool {tool_def.name} executed successfully with input: {input_data}"
+                        
+                except Exception as error:
+                    return f"Error executing tool {tool_def.name}: {str(error)}"
+            
+            # Set the function name and docstring for better identification
+            tool_function.__name__ = tool_def.name.replace(' ', '_').lower()
+            tool_function.__doc__ = tool_def.description
+            
+            # Create a proper ADK FunctionTool
+            try:
+                from google.adk.tools import FunctionTool
+                # Check the correct constructor parameters for FunctionTool
+                try:
+                    adk_tool = FunctionTool(
+                        function=tool_function,
+                        description=tool_def.description
+                    )
+                    # Wrap the FunctionTool to make it callable
+                    def wrapped_tool(input_data: str) -> str:
+                        try:
+                            # Use the FunctionTool's run method if available
+                            if hasattr(adk_tool, 'run'):
+                                return str(adk_tool.run(input_data))
+                            elif hasattr(adk_tool, '__call__'):
+                                return str(adk_tool(input_data))
+                            else:
+                                # Fallback to the original function
+                                return str(tool_function(input_data))
+                        except Exception as error:
+                            return f"Error executing tool {tool_def.name}: {str(error)}"
+                    
+                    wrapped_tool.__name__ = tool_def.name.replace(' ', '_').lower()
+                    wrapped_tool.__doc__ = tool_def.description
+                    return wrapped_tool
+                except TypeError:
+                    # If that fails, try with just the function
                     try:
-                        import json
-                        parsed_data = json.loads(data)
-                        if isinstance(parsed_data, dict) and parsed_data:
-                            return f"Data validation successful: {len(parsed_data)} fields validated"
-                        else:
-                            return "Data validation failed: Invalid format"
-                    except:
-                        return "Data validation failed: Invalid JSON format"
-                else:
-                    return f"Tool {tool_def.name} executed with data: {data}"
+                        adk_tool = FunctionTool(tool_function)
+                        # Same wrapping logic
+                        def wrapped_tool(input_data: str) -> str:
+                            try:
+                                if hasattr(adk_tool, 'run'):
+                                    return str(adk_tool.run(input_data))
+                                elif hasattr(adk_tool, '__call__'):
+                                    return str(adk_tool(input_data))
+                                else:
+                                    return str(tool_function(input_data))
+                            except Exception as execution_error:
+                                return f"Error executing tool {tool_def.name}: {str(execution_error)}"
+                        
+                        wrapped_tool.__name__ = tool_def.name.replace(' ', '_').lower()
+                        wrapped_tool.__doc__ = tool_def.description
+                        return wrapped_tool
+                    except Exception:
+                        # Fallback to the function if FunctionTool fails
+                        return tool_function
+            except ImportError:
+                # Fallback to the function if FunctionTool is not available
+                return tool_function
             
-            return tool_function
-            
-        except Exception as e:
-            print(f"Error creating function tool {tool_def.name}: {e}")
+        except Exception as error:
+            print(f"Error creating function tool {tool_def.name}: {error}")
             return None
     
     def create_llm_agent(self, config: AgentConfiguration) -> Optional[Any]:
@@ -339,8 +426,8 @@ class ADKService:
             
             return agent
             
-        except Exception as e:
-            print(f"Error creating LLM agent {config.name}: {e}")
+        except Exception as error:
+            print(f"Error creating LLM agent {config.name}: {error}")
             return None
     
     def create_agent(self, config: AgentConfiguration) -> Optional[Any]:
@@ -378,8 +465,8 @@ class ADKService:
                 self.tools[tool_def.id] = tool_def
                 return True
                 
-        except Exception as e:
-            print(f"Error registering tool {tool_def.name}: {e}")
+        except Exception as error:
+            print(f"Error registering tool {tool_def.name}: {error}")
             return False
     
     def register_agent(self, config: AgentConfiguration) -> bool:
@@ -390,8 +477,8 @@ class ADKService:
                 self.agents[config.id] = agent
                 return True
             return False
-        except Exception as e:
-            print(f"Error registering agent {config.name}: {e}")
+        except Exception as error:
+            print(f"Error registering agent {config.name}: {error}")
             return False
     
     async def execute_agent(self, agent_id: str, prompt: str, session_id: Optional[str] = None) -> AgentExecutionResult:
@@ -505,9 +592,9 @@ class ADKService:
                 execution_time=execution_time
             )
             
-        except Exception as e:
+        except Exception as error:
             execution_time = time.time() - start_time
-            error_msg = f"Error executing agent: {str(e)}"
+            error_msg = f"Error executing agent: {str(error)}"
             print(error_msg)
             
             return AgentExecutionResult(

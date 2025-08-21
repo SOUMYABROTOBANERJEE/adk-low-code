@@ -93,6 +93,35 @@ class DatabaseManager:
                     )
                 ''')
                 
+                # Create users table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        id TEXT PRIMARY KEY,
+                        email TEXT UNIQUE NOT NULL,
+                        name TEXT NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        is_active BOOLEAN DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_login TIMESTAMP,
+                        metadata TEXT
+                    )
+                ''')
+                
+                # Create user_sessions table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS user_sessions (
+                        id TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        session_token TEXT UNIQUE NOT NULL,
+                        expires_at TIMESTAMP NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        user_agent TEXT,
+                        ip_address TEXT,
+                        FOREIGN KEY (user_id) REFERENCES users (id)
+                    )
+                ''')
+                
                 conn.commit()
                 logger.info("Database initialized successfully")
                 
@@ -546,6 +575,164 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting chat sessions by agent: {e}")
             return []
+    
+    # User Management
+    def save_user(self, user_data: Dict[str, Any]) -> bool:
+        """Save or update a user"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Check if user exists
+                cursor.execute("SELECT id FROM users WHERE id = ?", (user_data['id'],))
+                exists = cursor.fetchone()
+                
+                if exists:
+                    # Update existing user
+                    cursor.execute('''
+                        UPDATE users SET
+                            email = ?, name = ?, password_hash = ?, is_active = ?,
+                            last_login = ?, metadata = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (
+                        user_data['email'],
+                        user_data['name'],
+                        user_data['password_hash'],
+                        user_data.get('is_active', True),
+                        user_data.get('last_login'),
+                        self._serialize_json(user_data.get('metadata')),
+                        user_data['id']
+                    ))
+                else:
+                    # Insert new user
+                    cursor.execute('''
+                        INSERT INTO users (
+                            id, email, name, password_hash, is_active, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        user_data['id'],
+                        user_data['email'],
+                        user_data['name'],
+                        user_data['password_hash'],
+                        user_data.get('is_active', True),
+                        self._serialize_json(user_data.get('metadata'))
+                    ))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error saving user: {e}")
+            return False
+    
+    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get a user by email"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM users WHERE email = ? AND is_active = 1", (email,))
+                row = cursor.fetchone()
+                
+                if row:
+                    columns = [description[0] for description in cursor.description]
+                    user_data = dict(zip(columns, row))
+                    user_data['metadata'] = self._deserialize_json(user_data['metadata'])
+                    return user_data
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting user by email: {e}")
+            return None
+    
+    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get a user by ID"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM users WHERE id = ? AND is_active = 1", (user_id,))
+                row = cursor.fetchone()
+                
+                if row:
+                    columns = [description[0] for description in cursor.description]
+                    user_data = dict(zip(columns, row))
+                    user_data['metadata'] = self._deserialize_json(user_data['metadata'])
+                    return user_data
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting user by ID: {e}")
+            return None
+    
+    # Session Management
+    def save_user_session(self, session_data: Dict[str, Any]) -> bool:
+        """Save or update a user session"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Check if session exists
+                cursor.execute("SELECT id FROM user_sessions WHERE id = ?", (session_data['id'],))
+                exists = cursor.fetchone()
+                
+                if exists:
+                    # Update existing session
+                    cursor.execute('''
+                        UPDATE user_sessions SET
+                            last_activity = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (session_data['id'],))
+                else:
+                    # Insert new session
+                    cursor.execute('''
+                        INSERT INTO user_sessions (
+                            id, user_id, session_token, expires_at, user_agent, ip_address
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        session_data['id'],
+                        session_data['user_id'],
+                        session_data['session_token'],
+                        session_data['expires_at'],
+                        session_data.get('user_agent'),
+                        session_data.get('ip_address')
+                    ))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error saving user session: {e}")
+            return False
+    
+    def get_user_session_by_token(self, session_token: str) -> Optional[Dict[str, Any]]:
+        """Get a user session by token"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM user_sessions WHERE session_token = ? AND expires_at > CURRENT_TIMESTAMP", (session_token,))
+                row = cursor.fetchone()
+                
+                if row:
+                    columns = [description[0] for description in cursor.description]
+                    session_data = dict(zip(columns, row))
+                    return session_data
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting user session by token: {e}")
+            return None
+    
+    def delete_user_session(self, session_token: str) -> bool:
+        """Delete a user session"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM user_sessions WHERE session_token = ?", (session_token,))
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error deleting user session: {e}")
+            return False
     
     def close(self):
         """Close database connections"""

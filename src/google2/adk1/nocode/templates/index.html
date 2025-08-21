@@ -73,7 +73,7 @@
                     <div class="relative">
                         <button id="notificationsBtn" class="p-2 text-gray-400 hover:text-gray-600 transition-colors relative">
                             <i class="fas fa-bell text-lg"></i>
-                            <span class="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+                            <span id="notificationDot" class="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full hidden"></span>
                         </button>
                     </div>
                     
@@ -87,7 +87,7 @@
                             <div class="h-8 w-8 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
                                 <span class="text-white text-sm font-medium">D</span>
                             </div>
-                            <span class="hidden md:block text-sm font-medium">Tata Steel User</span>
+                            <span class="hidden md:block text-sm font-medium" id="userDisplayName">Tata Steel User</span>
                             <i class="fas fa-chevron-down text-xs"></i>
                         </button>
                         
@@ -431,11 +431,18 @@
                 </div>
                 
                 <form id="toolForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tool ID</label>
+                        <input type="text" id="toolId" name="toolId" required
+                               class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                               placeholder="unique_tool_name">
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Tool Name</label>
                             <div class="relative">
-                                <input type="text" id="toolName" required
+                                <input type="text" id="toolName" name="toolName" required
                                        class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
                                 <button type="button" id="suggestToolNameBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
                                     <i class="fas fa-magic"></i>
@@ -445,7 +452,7 @@
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Tool Type</label>
-                            <select id="toolType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            <select id="toolType" name="toolType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
                                 <option value="function">Function Tool</option>
                                 <option value="builtin">Built-in Tool</option>
                                 <option value="google_cloud">Google Cloud Tool</option>
@@ -456,7 +463,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
                         <div class="relative">
-                            <textarea id="toolDescription" rows="2" required
+                            <textarea id="toolDescription" name="toolDescription" rows="2" required
                                       class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
                             <button type="button" id="suggestToolDescriptionBtn" class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
                                 <i class="fas fa-magic"></i>
@@ -466,8 +473,13 @@
                     
                     <div id="functionCodeSection" class="hidden">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Function Code</label>
+                        <div class="mb-2">
+                            <button type="button" id="generateToolCodeBtn" class="px-3 py-1 bg-accent text-white text-sm rounded-md hover:bg-accent/90 transition-colors">
+                                <i class="fas fa-magic mr-1"></i>Generate Python Code
+                            </button>
+                        </div>
                         <div class="relative">
-                            <textarea id="toolFunctionCode" rows="8"
+                            <textarea id="toolFunctionCode" name="toolFunctionCode" rows="8"
                                       class="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
                                       placeholder="def execute(input_data):&#10;    # Your tool logic here&#10;    return result"></textarea>
                             <button type="button" id="suggestToolCodeBtn" class="absolute right-2 top-2 text-gray-400 hover:text-primary transition-colors" title="Get AI suggestion">
@@ -481,7 +493,7 @@
                         <button type="button" id="cancelToolBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
                             Cancel
                         </button>
-                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                        <button type="submit" id="submitToolBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
                             Create Tool
                         </button>
                     </div>
@@ -504,12 +516,12 @@
                 <form id="projectForm" class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
-                        <input type="text" id="projectName" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                        <input type="text" id="projectName" name="projectName" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
                     </div>
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                        <textarea id="projectDescription" rows="3" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                        <textarea id="projectDescription" name="projectDescription" rows="3" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">

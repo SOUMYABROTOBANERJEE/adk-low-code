@@ -28,6 +28,12 @@ A powerful, production-ready platform for building and deploying AI agents using
 - **Data Persistence**: Agents, tools, and projects saved permanently
 - **Session Management**: Chat history and conversation tracking
 
+### 🔐 **Security & Users**
+- **User Authentication**: Registration, login, and sessions
+- **Password Hashing**: SHA-256 stored hashes
+- **Session Tokens**: Expiring user sessions
+- **Optional Observability**: Langfuse tracing for prod insights
+
 ### 🌐 **Modern Web Interface**
 - **Responsive Design**: Works on desktop and mobile
 - **Real-time Chat**: WebSocket-powered conversations
@@ -78,6 +84,18 @@ A powerful, production-ready platform for building and deploying AI agents using
 
 6. **Open your browser**
    Navigate to `http://localhost:8081`
+
+### Authentication (Quick test)
+
+```bash
+curl -X POST http://localhost:8081/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","name":"User","password":"secret123"}'
+
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret123"}'
+```
 
 ## 🏗️ Architecture
 
@@ -173,6 +191,11 @@ A powerful, production-ready platform for building and deploying AI agents using
 - `DATABASE_URL`: Database connection string (for production)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
 
+Optional (Langfuse Observability):
+- `LANGFUSE_SECRET_KEY`
+- `LANGFUSE_PUBLIC_KEY`
+- `LANGFUSE_HOST` (default `https://cloud.langfuse.com`)
+
 ### Database Configuration
 - **Development**: SQLite (default)
 - **Production**: Firestore or BigQuery
@@ -260,6 +283,11 @@ curl -X POST http://localhost:8081/api/agents \
 - `GET /api/tools` - List all tools
 - `POST /api/tools` - Create new tool
 - `POST /api/chat/{agent_id}` - Chat with agent
+
+### Authentication Endpoints
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login and receive session token
+- `POST /api/auth/logout` - Logout (invalidate session)
 
 ### AI Suggestion Endpoints
 - `POST /api/suggestions/agent/name` - Get agent name suggestions

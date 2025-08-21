@@ -17,10 +17,13 @@ from pydantic import ValidationError
 
 from .models import (
     AgentConfiguration, AgentUpdateRequest, ToolDefinition, SubAgent, AgentType, ToolType,
-    ChatMessage, ChatSession, AgentExecutionResult, ProjectConfiguration
+    ChatMessage, ChatSession, AgentExecutionResult, ProjectConfiguration,
+    LoginRequest, RegisterRequest, AuthResponse
 )
 from .adk_service import ADKService
 from .database import DatabaseManager
+from .auth_service import AuthService
+from .langfuse_service import LangfuseService
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -32,6 +35,8 @@ app = FastAPI(
 # Initialize services
 db_manager = DatabaseManager()
 adk_service = ADKService(db_manager)
+auth_service = AuthService(db_manager)
+langfuse_service = LangfuseService()
 
 # Get the directory of this file
 current_dir = Path(__file__).parent
@@ -60,8 +65,94 @@ async def health_check():
     return {
         "status": "healthy",
         "adk_available": adk_service.is_available(),
+        "langfuse_available": langfuse_service.is_langfuse_available(),
         "timestamp": datetime.now().isoformat()
     }
+
+
+# Authentication Endpoints
+@app.post("/api/auth/register", response_model=AuthResponse)
+async def register_user(request: RegisterRequest, req: Request):
+    """Register a new user"""
+    try:
+        # Get client IP and user agent
+        client_ip = req.client.host if req.client else None
+        user_agent = req.headers.get("user-agent")
+        
+        # Register user
+        response = auth_service.register_user(request)
+        
+        # Trace user registration
+        if response.success and response.user:
+            langfuse_service.trace_user_action(
+                user_id=response.user.id,
+                action="user_registration",
+                details={
+                    "email": request.email,
+                    "ip_address": client_ip,
+                    "user_agent": user_agent
+                }
+            )
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+async def login_user(request: LoginRequest, req: Request):
+    """Authenticate user and create session"""
+    try:
+        # Get client IP and user agent
+        client_ip = req.client.host if req.client else None
+        user_agent = req.headers.get("user-agent")
+        
+        # Login user
+        response = auth_service.login_user(request, user_agent, client_ip)
+        
+        # Trace user login
+        if response.success and response.user:
+            langfuse_service.trace_user_action(
+                user_id=response.user.id,
+                action="user_login",
+                details={
+                    "email": request.email,
+                    "ip_address": client_ip,
+                    "user_agent": user_agent
+                }
+            )
+        
+        return response
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/logout")
+async def logout_user(session_token: str):
+    """Logout user by invalidating session"""
+    try:
+        success = auth_service.logout_user(session_token)
+        if success:
+            return {"success": True, "message": "Logged out successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid session token")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/auth/me")
+async def get_current_user(session_token: str):
+    """Get current user information from session"""
+    try:
+        user = auth_service.get_user_by_session(session_token)
+        if user:
+            return {"success": True, "user": user.model_dump()}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Tool Management Endpoints
@@ -276,7 +367,7 @@ async def delete_agent(agent_id: str):
 
 # Chat and Execution Endpoints
 @app.post("/api/chat/{agent_id}")
-async def chat_with_agent(agent_id: str, request: Dict[str, Any]):
+async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
     """Chat with an agent"""
     try:
         # Check if agent exists in database
@@ -286,6 +377,7 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any]):
         
         prompt = request.get("message", "")
         session_id = request.get("session_id")
+        user_id = request.get("user_id", "anonymous")
         
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -293,11 +385,34 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any]):
         # Execute agent
         result = await adk_service.execute_agent(agent_id, prompt, session_id)
         
+        # Trace agent execution with Langfuse
+        if langfuse_service.is_langfuse_available():
+            trace_id = langfuse_service.trace_agent_execution(
+                user_id=user_id,
+                agent_id=agent_id,
+                agent_name=agent.get("name", "Unknown Agent"),
+                user_prompt=prompt,
+                agent_response=result.response if result.success else result.error,
+                execution_time=result.execution_time or 0.0,
+                success=result.success,
+                metadata={
+                    "agent_type": agent.get("agent_type", "unknown"),
+                    "model": agent.get("model_settings", {}).get("model") if agent.get("model_settings") else "unknown",
+                    "session_id": session_id
+                }
+            )
+            
+            # Add trace ID to response if available
+            if trace_id:
+                result.metadata = result.metadata or {}
+                result.metadata["trace_id"] = trace_id
+                result.metadata["trace_url"] = langfuse_service.get_trace_url(trace_id)
+        
         # Save chat session to database
         session_data = {
             "id": session_id,
             "agent_id": agent_id,
-            "user_id": request.get("user_id"),
+            "user_id": user_id,
             "messages": [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.response}]
         }
         db_manager.save_chat_session(session_data)
@@ -307,7 +422,8 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any]):
             "response": result.response,
             "error": result.error,
             "session_id": session_id,
-            "execution_time": result.execution_time
+            "execution_time": result.execution_time,
+            "metadata": result.metadata
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
