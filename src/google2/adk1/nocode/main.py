@@ -162,16 +162,18 @@ async def create_tool(tool: ToolDefinition):
     try:
         tool.id = tool.id or str(uuid.uuid4())
         
-        # Register tool in ADK service
-        if adk_service.register_tool(tool):
-            # Save to database
-            tool_data = tool.model_dump()
-            if db_manager.save_tool(tool_data):
-                return {"success": True, "tool": tool_data}
-            else:
-                raise HTTPException(status_code=500, detail="Failed to save tool to database")
+        # Try to register tool in ADK service (optional for function tools)
+        adk_registration_success = adk_service.register_tool(tool)
+        
+        # Save to database (required)
+        tool_data = tool.model_dump()
+        if db_manager.save_tool(tool_data):
+            # Return success even if ADK registration failed
+            if not adk_registration_success:
+                print(f"Warning: Tool {tool.name} saved to database but ADK registration failed")
+            return {"success": True, "tool": tool_data}
         else:
-            raise HTTPException(status_code=400, detail="Failed to register tool in ADK service")
+            raise HTTPException(status_code=500, detail="Failed to save tool to database")
             
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -220,16 +222,18 @@ async def update_tool(tool_id: str, tool: ToolDefinition):
         
         tool.id = tool_id
         
-        # Re-register tool in ADK service
-        if adk_service.register_tool(tool):
-            # Update in database
-            tool_data = tool.model_dump()
-            if db_manager.save_tool(tool_data):
-                return {"success": True, "tool": tool_data}
-            else:
-                raise HTTPException(status_code=500, detail="Failed to update tool in database")
+        # Try to re-register tool in ADK service (optional for function tools)
+        adk_registration_success = adk_service.register_tool(tool)
+        
+        # Update in database (required)
+        tool_data = tool.model_dump()
+        if db_manager.save_tool(tool_data):
+            # Return success even if ADK registration failed
+            if not adk_registration_success:
+                print(f"Warning: Tool {tool.name} updated in database but ADK registration failed")
+            return {"success": True, "tool": tool_data}
         else:
-            raise HTTPException(status_code=400, detail="Failed to register updated tool")
+            raise HTTPException(status_code=500, detail="Failed to update tool in database")
             
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
