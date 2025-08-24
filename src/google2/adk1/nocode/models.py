@@ -71,6 +71,8 @@ class ToolDefinition(BaseModel):
     # Metadata
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
     is_enabled: bool = Field(default=True, description="Whether the tool is enabled")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
     
     @validator('function_code')
     def validate_function_code(cls, v, values):
@@ -108,6 +110,55 @@ class SubAgent(BaseModel):
     
     # Metadata
     is_enabled: bool = Field(default=True, description="Whether the sub-agent is enabled")
+
+
+class AgentCreateRequest(BaseModel):
+    """Request model for creating agents with sub-agent support"""
+    id: Optional[str] = Field(None, description="Unique identifier for the agent")
+    name: str = Field(..., description="Display name of the agent")
+    description: str = Field(..., description="Description of the agent's purpose")
+    agent_type: AgentType = Field(..., description="Type of the agent")
+    
+    # Core configuration
+    system_prompt: str = Field(..., description="Main system prompt for the agent")
+    instructions: Optional[str] = Field(None, description="Additional instructions")
+    
+    # Sub-agents structure for creation
+    sub_agents: Optional[Dict[str, Any]] = Field(
+        default_factory=lambda: {"existing": [], "new": []},
+        description="Sub-agents structure with existing IDs and new configurations"
+    )
+    
+    # Tools
+    tools: List[str] = Field(default_factory=list, description="List of tool IDs this agent can use")
+    
+    # Model configuration
+    model_settings: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "model": "gemini-1.5-pro",
+            "temperature": 0.7,
+            "max_tokens": 1000
+        },
+        description="Configuration for the underlying model"
+    )
+    
+    # Workflow configuration (for workflow agents)
+    workflow_config: Optional[Dict[str, Any]] = Field(None, description="Workflow-specific configuration")
+    
+    # UI configuration
+    ui_config: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "position": {"x": 100, "y": 100},
+            "size": {"width": 300, "height": 200},
+            "color": "#4A90E2"
+        },
+        description="UI display configuration"
+    )
+    
+    # Metadata
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    version: str = Field(default="1.0.0", description="Version of the agent configuration")
+    is_enabled: bool = Field(default=True, description="Whether the agent is enabled")
 
 
 class AgentConfiguration(BaseModel):
@@ -207,6 +258,9 @@ class ProjectConfiguration(BaseModel):
         },
         description="Project-level settings"
     )
+    
+    # Configuration (for backward compatibility with database)
+    config: Optional[Dict[str, Any]] = Field(None, description="Additional configuration data")
     
     # Metadata
     version: str = Field(default="1.0.0", description="Version of the project")

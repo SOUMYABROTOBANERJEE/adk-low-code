@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from langfuse import Langfuse
-from langfuse import Langfuse
 
 
 class LangfuseService:

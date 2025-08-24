@@ -28,19 +28,19 @@ class AgentGeniePlatform {
         
         // Navigation buttons
         document.querySelectorAll('[data-section]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const section = e.target.dataset.section;
-                this.showSection(section);
+                await this.showSection(section);
             });
         });
         
         // Dashboard Quick Action buttons
-        document.getElementById('dashboardCreateAgentBtn')?.addEventListener('click', () => {
-            this.showSection('agents');
+        document.getElementById('dashboardCreateAgentBtn')?.addEventListener('click', async () => {
+            await this.showSection('agents');
             setTimeout(() => this.showModal('agentModal'), 100);
         });
-        document.getElementById('dashboardCreateToolBtn')?.addEventListener('click', () => {
-            this.showSection('tools');
+        document.getElementById('dashboardCreateToolBtn')?.addEventListener('click', async () => {
+            await this.showSection('tools');
             setTimeout(() => this.showModal('toolModal'), 100);
         });
         
@@ -77,6 +77,35 @@ class AgentGeniePlatform {
         document.getElementById('projectForm')?.addEventListener('submit', (e) => this.handleProjectSubmit(e));
         document.getElementById('cancelProjectBtn')?.addEventListener('click', () => this.hideModal('projectModal'));
         
+        // Sub-agent management
+        document.getElementById('addSubAgentBtn')?.addEventListener('click', () => this.showModal('subAgentModal'));
+        document.getElementById('addExistingAsSubBtn')?.addEventListener('click', () => this.showModal('linkExistingAgentModal'));
+        document.getElementById('subAgentForm')?.addEventListener('submit', (e) => this.handleSubAgentSubmit(e));
+        document.getElementById('linkExistingAgentForm')?.addEventListener('click', (e) => this.handleLinkExistingAgentSubmit(e));
+        document.getElementById('cancelSubAgentBtn')?.addEventListener('click', () => this.hideModal('subAgentModal'));
+        document.getElementById('cancelLinkExistingBtn')?.addEventListener('click', () => this.hideModal('linkExistingAgentModal'));
+        document.getElementById('parentAgentSelect')?.addEventListener('change', (e) => this.onParentAgentChange(e));
+        
+        // Sub-agent functionality in agent modal
+        const addExistingBtn = document.getElementById('addExistingAsSubInAgentBtn');
+        const addNewBtn = document.getElementById('addNewSubAgentInAgentBtn');
+        
+        console.log('Sub-agent buttons found:', {
+            addExistingBtn: !!addExistingBtn,
+            addNewBtn: !!addNewBtn
+        });
+        
+        addExistingBtn?.addEventListener('click', () => {
+            console.log('Add Existing button clicked!');
+            this.showSelectExistingAgentModal();
+        });
+        addNewBtn?.addEventListener('click', () => {
+            console.log('Add New button clicked!');
+            this.addNewSubAgentField();
+        });
+        document.getElementById('cancelSelectExistingBtn')?.addEventListener('click', () => this.hideModal('selectExistingAgentModal'));
+        document.getElementById('confirmSelectExistingBtn')?.addEventListener('click', () => this.confirmSelectExistingAgent());
+        
         // Chat interface
         document.getElementById('sendMessageBtn')?.addEventListener('click', () => this.sendMessage());
         document.getElementById('chatInput')?.addEventListener('keypress', (e) => {
@@ -107,7 +136,137 @@ class AgentGeniePlatform {
         document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
     }
     
-    showSection(sectionName) {
+    // Sub-agent functionality in agent modal
+    showSelectExistingAgentModal() {
+        console.log('showSelectExistingAgentModal called');
+        this.showModal('selectExistingAgentModal');
+        this.populateAvailableAgentsForSelection();
+    }
+    
+    async populateAvailableAgentsForSelection() {
+        console.log('populateAvailableAgentsForSelection called');
+        const container = document.getElementById('availableAgentsList');
+        if (!container) {
+            console.error('availableAgentsList container not found');
+            return;
+        }
+        
+        try {
+            const availableAgents = await this.loadAvailableAgentsForSub();
+            console.log('Available agents loaded:', availableAgents);
+            
+            if (availableAgents.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-500 py-4">
+                        <i class="fas fa-robot text-2xl mb-2"></i>
+                        <p>No agents available for sub-agent selection</p>
+                        <p class="text-sm">Create some agents first to use them as sub-agents</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Add header with instructions
+            container.innerHTML = `
+                <div class="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                    <p class="text-sm text-blue-800">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Select one or more agents to use as sub-agents. You can select multiple agents.
+                    </p>
+                </div>
+            `;
+            
+            availableAgents.forEach(agent => {
+                const agentDiv = document.createElement('div');
+                agentDiv.className = 'flex items-center p-3 border border-gray-200 rounded-md mb-2 hover:bg-gray-50 transition-colors';
+                agentDiv.innerHTML = `
+                    <input type="checkbox" id="select_${agent.id}" value="${agent.id}" class="mr-3 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                    <label for="select_${agent.id}" class="flex-1 cursor-pointer">
+                        <div class="font-medium text-gray-900">${agent.name}</div>
+                        <div class="text-sm text-gray-600">${agent.description || 'No description'}</div>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                ${agent.agent_type || 'unknown'}
+                            </span>
+                            ${agent.tools && agent.tools.length > 0 ? 
+                                `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    ${agent.tools.length} tools
+                                </span>` : ''
+                            }
+                        </div>
+                    </label>
+                `;
+                container.appendChild(agentDiv);
+            });
+        } catch (error) {
+            console.error('Error populating available agents:', error);
+        }
+    }
+    
+    addNewSubAgentField() {
+        console.log('addNewSubAgentField called');
+        const container = document.getElementById('newSubAgentsContainer');
+        if (!container) {
+            console.error('newSubAgentsContainer not found');
+            return;
+        }
+        
+        const subAgentId = 'sub_' + Date.now();
+        const subAgentDiv = document.createElement('div');
+        subAgentDiv.className = 'border border-gray-300 rounded-md p-3 bg-gray-50';
+        subAgentDiv.innerHTML = `
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-700">New Sub-Agent</span>
+                <button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Name</label>
+                    <input type="text" name="subAgentName_${subAgentId}" class="w-full p-2 text-sm border border-gray-300 rounded-md" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                    <select name="subAgentType_${subAgentId}" class="w-full p-2 text-sm border border-gray-300 rounded-md">
+                        <option value="llm">LLM Agent</option>
+                        <option value="sequential">Sequential Agent</option>
+                        <option value="parallel">Parallel Agent</option>
+                        <option value="loop">Loop Agent</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                    <textarea name="subAgentDescription_${subAgentId}" rows="2" class="w-full p-2 text-sm border border-gray-300 rounded-md"></textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">System Prompt</label>
+                    <textarea name="subAgentSystemPrompt_${subAgentId}" rows="2" class="w-full p-2 text-sm border border-gray-300 rounded-md"></textarea>
+                </div>
+            </div>
+        `;
+        container.appendChild(subAgentDiv);
+        console.log('New sub-agent field added');
+    }
+    
+    confirmSelectExistingAgent() {
+        const selectedAgents = Array.from(document.querySelectorAll('#availableAgentsList input:checked')).map(cb => cb.value);
+        if (selectedAgents.length === 0) {
+            this.showMessage('Please select at least one agent', 'error');
+            return;
+        }
+        
+        // Add selected agents to the existing sub-agents selection
+        this.addSelectedAgentsToSelection(selectedAgents);
+        
+        // Show success message with count
+        const agentNames = selectedAgents.map(id => this.agents.find(a => a.id === id)?.name).filter(Boolean);
+        this.showMessage(`Added ${selectedAgents.length} sub-agent(s): ${agentNames.join(', ')}`, 'success');
+        
+        this.hideModal('selectExistingAgentModal');
+    }
+    
+    async showSection(sectionName) {
         // Hide all sections
         document.querySelectorAll('.section').forEach(section => {
             section.classList.add('hidden');
@@ -133,11 +292,19 @@ class AgentGeniePlatform {
         
         // Load section-specific data
         if (sectionName === 'agents') {
+            // Reload agents data and then render
+            await this.loadAgents();
             this.renderAgentsGrid();
         } else if (sectionName === 'tools') {
+            // Reload tools data and then render
+            await this.loadTools();
             this.renderToolsGrid();
         } else if (sectionName === 'projects') {
             this.renderProjectsGrid();
+        } else if (sectionName === 'sub-agents') {
+            // Special handling for sub-agents section
+            await this.populateParentAgentSelect();
+            await this.populateExistingAgentSelect();
         }
     }
     
@@ -245,6 +412,100 @@ class AgentGeniePlatform {
         if (toolCount) toolCount.textContent = this.tools.length;
         if (projectCount) projectCount.textContent = this.projects.length;
         if (chatCount) chatCount.textContent = '0'; // Could be enhanced to show actual chat sessions
+        
+        // Update recent agents and tools sections
+        this.updateRecentAgents();
+        this.updateRecentTools();
+    }
+    
+    updateRecentAgents() {
+        const container = document.getElementById('recentAgents');
+        if (!container) return;
+        
+        if (this.agents.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-gray-500 py-4">
+                    <i class="fas fa-robot text-2xl mb-2"></i>
+                    <p class="text-sm">No agents created yet</p>
+                    <button onclick="app.showSection('agents').catch(console.error)" class="text-primary hover:text-primary/80 text-sm mt-2">
+                        Create your first agent →
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show up to 3 recent agents
+        const recentAgents = this.agents.slice(0, 3);
+        container.innerHTML = recentAgents.map(agent => `
+            <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <div class="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-robot text-blue-600"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">${agent.name}</p>
+                    <p class="text-xs text-gray-500 truncate">${agent.description || 'No description'}</p>
+                </div>
+                <button onclick="app.startChat('${agent.id}')" class="text-blue-500 hover:text-blue-700 p-1">
+                    <i class="fas fa-comments text-sm"></i>
+                </button>
+            </div>
+        `).join('');
+        
+        if (this.agents.length > 3) {
+            container.innerHTML += `
+                <div class="text-center pt-2">
+                                            <button onclick="app.showSection('agents').catch(console.error)" class="text-primary hover:text-primary/80 text-sm">
+                            View all ${this.agents.length} agents →
+                        </button>
+                </div>
+            `;
+        }
+    }
+    
+    updateRecentTools() {
+        const container = document.getElementById('recentTools');
+        if (!container) return;
+        
+        if (this.tools.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-gray-500 py-4">
+                    <i class="fas fa-tools text-2xl mb-2"></i>
+                    <p class="text-sm">No tools created yet</p>
+                    <button onclick="app.showSection('tools').catch(console.error)" class="text-primary hover:text-primary/80 text-sm mt-2">
+                        Create your first tool →
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show up to 3 recent tools
+        const recentTools = this.tools.slice(0, 3);
+        container.innerHTML = recentTools.map(tool => `
+            <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                <div class="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-tools text-green-600"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">${tool.name}</p>
+                    <p class="text-xs text-gray-500 truncate">${tool.description || 'No description'}</p>
+                </div>
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    ${tool.tool_type}
+                </span>
+            </div>
+        `).join('');
+        
+        if (this.tools.length > 3) {
+            container.innerHTML += `
+                <div class="text-center pt-2">
+                                            <button onclick="app.showSection('tools').catch(console.error)" class="text-primary hover:text-primary/80 text-sm">
+                            View all ${this.tools.length} tools →
+                        </button>
+                </div>
+            `;
+        }
     }
     
     async checkADKStatus() {
@@ -307,9 +568,13 @@ class AgentGeniePlatform {
     
     async loadAgents() {
         try {
+            console.log('Loading agents...');
             const response = await fetch('/api/agents');
+            console.log('Agents response status:', response.status);
             const data = await response.json();
+            console.log('Agents response data:', data);
             this.agents = data.agents || [];
+            console.log('Agents loaded:', this.agents);
             this.updateChatAgentSelect();
         } catch (error) {
             console.error('Error loading agents:', error);
@@ -318,9 +583,13 @@ class AgentGeniePlatform {
     
     async loadTools() {
         try {
+            console.log('Loading tools...');
             const response = await fetch('/api/tools');
+            console.log('Tools response status:', response.status);
             const data = await response.json();
+            console.log('Tools response data:', data);
             this.tools = data.tools || [];
+            console.log('Tools loaded:', this.tools);
         } catch (error) {
             console.error('Error loading tools:', error);
         }
@@ -337,8 +606,13 @@ class AgentGeniePlatform {
     }
     
     renderAgentsGrid() {
+        console.log('Rendering agents grid...');
+        console.log('Agents to render:', this.agents);
         const container = document.getElementById('agentsGrid');
-        if (!container) return;
+        if (!container) {
+            console.error('Agents grid container not found!');
+            return;
+        }
         
         container.innerHTML = '';
         
@@ -377,7 +651,7 @@ class AgentGeniePlatform {
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             ${agent.agent_type}
                         </span>
-                        ${agent.tags.map(tag => `
+                        ${(agent.tags || []).map(tag => `
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                 ${tag}
                             </span>
@@ -402,8 +676,13 @@ class AgentGeniePlatform {
     }
     
     renderToolsGrid() {
+        console.log('Rendering tools grid...');
+        console.log('Tools to render:', this.tools);
         const container = document.getElementById('toolsGrid');
-        if (!container) return;
+        if (!container) {
+            console.error('Tools grid container not found!');
+            return;
+        }
         
         container.innerHTML = '';
         
@@ -442,7 +721,7 @@ class AgentGeniePlatform {
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             ${tool.tool_type}
                         </span>
-                        ${tool.tags.map(tag => `
+                        ${(tool.tags || []).map(tag => `
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                 ${tag}
                             </span>
@@ -537,8 +816,12 @@ class AgentGeniePlatform {
         });
     }
     
-    startChat(agentId) {
-        this.showSection('chat');
+    async startChat(agentId) {
+        this.currentAgent = this.agents.find(a => a.id === agentId);
+        this.currentSession = null;
+        this.clearChat();
+        this.showMessage(`Selected agent: ${this.currentAgent.name}`, 'info');
+        await this.showSection('chat');
         this.selectChatAgent({ target: { value: agentId } });
     }
     
@@ -562,6 +845,10 @@ class AgentGeniePlatform {
         // Generate a unique ID for new agents
         const agentId = this.currentAgent?.id || this.generateAgentId();
         
+        // Collect sub-agent data
+        const existingSubAgents = Array.from(document.querySelectorAll('#existingSubAgentsSelection input:checked')).map(cb => cb.value);
+        const newSubAgents = this.collectNewSubAgentsData();
+        
         const agentData = {
             id: agentId,
             name: formData.get('agentName'),
@@ -575,6 +862,10 @@ class AgentGeniePlatform {
                 max_tokens: parseInt(document.getElementById('agentMaxTokens')?.value || '1000')
             },
             tools: Array.from(document.querySelectorAll('#agentToolsSelection input:checked')).map(cb => cb.value),
+            sub_agents: {
+                existing: existingSubAgents,
+                new: newSubAgents
+            },
             tags: []
         };
         
@@ -1199,6 +1490,392 @@ class AgentGeniePlatform {
             this.showLoading(false);
         }
     }
+
+    // Sub-Agent Management Methods
+    async loadSubAgentsForAgent(agentId) {
+        try {
+            const response = await fetch(`/api/agents/${agentId}/sub-agents`);
+            const data = await response.json();
+            return data.sub_agents || [];
+        } catch (error) {
+            console.error('Error loading sub-agents:', error);
+            return [];
+        }
+    }
+
+    async loadAvailableAgentsForSub() {
+        try {
+            const response = await fetch('/api/agents/available-for-sub');
+            const data = await response.json();
+            return data.agents || [];
+        } catch (error) {
+            console.error('Error loading available agents for sub:', error);
+            return [];
+        }
+    }
+
+    async onParentAgentChange(event) {
+        const agentId = event.target.value;
+        if (!agentId) {
+            this.renderSubAgentsList([]);
+            return;
+        }
+
+        try {
+            const subAgents = await this.loadSubAgentsForAgent(agentId);
+            this.renderSubAgentsList(subAgents);
+        } catch (error) {
+            console.error('Error loading sub-agents:', error);
+            this.showMessage('Error loading sub-agents', 'error');
+        }
+    }
+
+    renderSubAgentsList(subAgents) {
+        const container = document.getElementById('subAgentsList');
+        if (!container) return;
+
+        if (subAgents.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-gray-500 py-8">
+                    <i class="fas fa-sitemap text-4xl mb-4"></i>
+                    <p>No sub-agents found for this agent</p>
+                    <p class="text-sm">Use the buttons above to add sub-agents</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = '';
+        subAgents.forEach(subAgent => {
+            const subAgentElement = this.createSubAgentCard(subAgent);
+            container.appendChild(subAgentElement);
+        });
+    }
+
+    createSubAgentCard(subAgent) {
+        const div = document.createElement('div');
+        div.className = 'bg-gray-50 rounded-lg p-4 border border-gray-200';
+        
+        div.innerHTML = `
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <h4 class="font-medium text-gray-900 mb-1">${subAgent.name}</h4>
+                    <p class="text-sm text-gray-600 mb-2">${subAgent.description || 'No description'}</p>
+                    <div class="flex items-center space-x-2">
+                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            ${subAgent.agent_type || 'unknown'}
+                        </span>
+                        ${subAgent.is_enabled ? 
+                            '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Enabled</span>' :
+                            '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Disabled</span>'
+                        }
+                    </div>
+                </div>
+                <button onclick="app.removeSubAgent('${subAgent.id}')" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors" title="Remove sub-agent">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        return div;
+    }
+
+    async handleSubAgentSubmit(event) {
+        event.preventDefault();
+        
+        const parentAgentId = document.getElementById('parentAgentSelect')?.value;
+        if (!parentAgentId) {
+            this.showMessage('Please select a parent agent first', 'warning');
+            return;
+        }
+
+        const formData = {
+            name: document.getElementById('subAgentName')?.value,
+            description: document.getElementById('subAgentDescription')?.value,
+            agent_type: document.getElementById('subAgentType')?.value,
+            system_prompt: document.getElementById('subAgentSystemPrompt')?.value,
+            is_enabled: true
+        };
+
+        try {
+            this.showLoading(true);
+            const response = await fetch(`/api/agents/${parentAgentId}/sub-agents`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            if (response.ok) {
+                this.showMessage('Sub-agent added successfully!', 'success');
+                this.hideModal('subAgentModal');
+                this.resetSubAgentForm();
+                
+                // Refresh sub-agents list
+                const subAgents = await this.loadSubAgentsForAgent(parentAgentId);
+                this.renderSubAgentsList(subAgents);
+            } else {
+                const error = await response.json();
+                this.showMessage(`Error: ${error.detail || 'Failed to add sub-agent'}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error adding sub-agent:', error);
+            this.showMessage('Error adding sub-agent', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async handleLinkExistingAgentSubmit(event) {
+        event.preventDefault();
+        
+        const parentAgentId = document.getElementById('parentAgentSelect')?.value;
+        const existingAgentId = document.getElementById('existingAgentSelect')?.value;
+        
+        if (!parentAgentId) {
+            this.showMessage('Please select a parent agent first', 'warning');
+            return;
+        }
+        
+        if (!existingAgentId) {
+            this.showMessage('Please select an agent to link', 'warning');
+            return;
+        }
+
+        try {
+            this.showLoading(true);
+            const response = await fetch(`/api/agents/${parentAgentId}/sub-agents/from-existing`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source_agent_id: existingAgentId })
+            });
+
+            if (response.ok) {
+                this.showMessage('Agent linked as sub-agent successfully!', 'success');
+                this.hideModal('linkExistingAgentModal');
+                this.resetLinkExistingAgentForm();
+                
+                // Refresh sub-agents list
+                const subAgents = await this.loadSubAgentsForAgent(parentAgentId);
+                this.renderSubAgentsList(subAgents);
+                
+                // Refresh available agents dropdown
+                this.populateExistingAgentSelect();
+            } else {
+                const error = await response.json();
+                this.showMessage(`Error: ${error.detail || 'Failed to link agent'}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error linking agent:', error);
+            this.showMessage('Error linking agent', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async removeSubAgent(subAgentId) {
+        const parentAgentId = document.getElementById('parentAgentSelect')?.value;
+        if (!parentAgentId) {
+            this.showMessage('No parent agent selected', 'warning');
+            return;
+        }
+
+        if (!confirm('Are you sure you want to remove this sub-agent?')) return;
+
+        try {
+            this.showLoading(true);
+            const response = await fetch(`/api/agents/${parentAgentId}/sub-agents/${subAgentId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.showMessage('Sub-agent removed successfully!', 'success');
+                
+                // Refresh sub-agents list
+                const subAgents = await this.loadSubAgentsForAgent(parentAgentId);
+                this.renderSubAgentsList(subAgents);
+                
+                // Refresh available agents dropdown
+                this.populateExistingAgentSelect();
+            } else {
+                const error = await response.json();
+                this.showMessage(`Error: ${error.detail || 'Failed to remove sub-agent'}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error removing sub-agent:', error);
+            this.showMessage('Error removing sub-agent', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    resetSubAgentForm() {
+        document.getElementById('subAgentForm')?.reset();
+    }
+
+    resetLinkExistingAgentForm() {
+        document.getElementById('linkExistingAgentForm')?.reset();
+    }
+
+    async populateExistingAgentSelect() {
+        const select = document.getElementById('existingAgentSelect');
+        if (!select) return;
+
+        try {
+            const availableAgents = await this.loadAvailableAgentsForSub();
+            
+            // Clear existing options
+            select.innerHTML = '<option value="">Choose an agent...</option>';
+            
+            // Add available agents
+            availableAgents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = `${agent.name} - ${agent.description}`;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error populating existing agent select:', error);
+        }
+    }
+
+    async populateParentAgentSelect() {
+        const select = document.getElementById('parentAgentSelect');
+        if (!select) return;
+
+        try {
+            // Clear existing options
+            select.innerHTML = '<option value="">Choose an agent...</option>';
+            
+            // Add all agents
+            this.agents.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                option.textContent = agent.name;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error populating parent agent select:', error);
+        }
+    }
+    
+    // Sub-agent functionality in agent modal
+    addSelectedAgentsToSelection(selectedAgentIds) {
+        const container = document.getElementById('existingSubAgentsSelection');
+        if (!container) return;
+        
+        // Check if agents are already selected to avoid duplicates
+        const existingSelections = Array.from(container.querySelectorAll('input[type="checkbox"]')).map(cb => cb.value);
+        
+        selectedAgentIds.forEach(agentId => {
+            // Skip if already selected
+            if (existingSelections.includes(agentId)) {
+                return;
+            }
+            
+            const agent = this.agents.find(a => a.id === agentId);
+            if (agent) {
+                const agentDiv = document.createElement('div');
+                agentDiv.className = 'flex items-center p-3 border border-blue-200 rounded-md mb-2 bg-blue-50 hover:bg-blue-100 transition-colors';
+                agentDiv.innerHTML = `
+                    <input type="checkbox" name="existingSubAgent_${agentId}" value="${agentId}" checked class="mr-3 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                    <label class="flex-1">
+                        <div class="font-medium text-gray-900">${agent.name}</div>
+                        <div class="text-sm text-gray-600">${agent.description || 'No description'}</div>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                ${agent.agent_type || 'unknown'}
+                            </span>
+                            ${agent.tools && agent.tools.length > 0 ? 
+                                `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    ${agent.tools.length} tools
+                                </span>` : ''
+                            }
+                        </div>
+                    </label>
+                    <button type="button" onclick="this.remove()" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors" title="Remove sub-agent">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                container.appendChild(agentDiv);
+            }
+        });
+        
+        // Update the selection count display
+        this.updateSubAgentSelectionCount();
+    }
+    
+    clearAllSubAgentSelections() {
+        const existingContainer = document.getElementById('existingSubAgentsSelection');
+        const newContainer = document.getElementById('newSubAgentsContainer');
+        
+        if (existingContainer) {
+            existingContainer.innerHTML = '';
+        }
+        
+        if (newContainer) {
+            newContainer.innerHTML = '';
+        }
+        
+        // Update counts
+        this.updateSubAgentSelectionCount();
+        this.updateNewSubAgentCount();
+        
+        this.showMessage('All sub-agent selections cleared', 'info');
+    }
+    
+    updateSubAgentSelectionCount() {
+        const container = document.getElementById('existingSubAgentsSelection');
+        if (!container) return;
+        
+        const selectedCount = container.querySelectorAll('input[type="checkbox"]').length;
+        const headerElement = container.previousElementSibling;
+        
+        if (headerElement && headerElement.querySelector('.sub-agent-count')) {
+            headerElement.querySelector('.sub-agent-count').textContent = selectedCount;
+        }
+    }
+    
+    updateNewSubAgentCount() {
+        const container = document.getElementById('newSubAgentsContainer');
+        if (!container) return;
+        
+        const newSubAgentCount = container.querySelectorAll('div').length;
+        const headerElement = container.previousElementSibling;
+        
+        if (headerElement && headerElement.querySelector('.new-sub-agent-count')) {
+            headerElement.querySelector('.new-sub-agent-count').textContent = newSubAgentCount;
+        }
+    }
+    
+    collectNewSubAgentsData() {
+        const newSubAgents = [];
+        const newSubAgentDivs = document.querySelectorAll('#newSubAgentsContainer > div');
+        
+        newSubAgentDivs.forEach(div => {
+            const nameInput = div.querySelector('input[name^="subAgentName_"]');
+            const typeSelect = div.querySelector('select[name^="subAgentType_"]');
+            const descriptionTextarea = div.querySelector('textarea[name^="subAgentDescription_"]');
+            const systemPromptTextarea = div.querySelector('textarea[name^="subAgentSystemPrompt_"]');
+            
+            if (nameInput && nameInput.value.trim()) {
+                newSubAgents.push({
+                    id: `new_sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    name: nameInput.value.trim(),
+                    agent_type: typeSelect ? typeSelect.value : 'llm',
+                    description: descriptionTextarea ? descriptionTextarea.value.trim() : '',
+                    system_prompt: systemPromptTextarea ? systemPromptTextarea.value.trim() : '',
+                    is_enabled: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            }
+        });
+        
+        console.log('Collected new sub-agents data:', newSubAgents);
+        return newSubAgents;
+    }
+    
+
 }
 
 // Initialize the application when DOM is loaded

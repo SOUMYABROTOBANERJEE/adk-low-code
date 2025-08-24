@@ -4,6 +4,7 @@ Main FastAPI application for the Google ADK No-Code Platform
 
 import uuid
 import json
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -13,10 +14,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.requests import Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from .models import (
-    AgentConfiguration, AgentUpdateRequest, ToolDefinition, SubAgent, AgentType, ToolType,
+    AgentConfiguration, AgentCreateRequest, AgentUpdateRequest, ToolDefinition, SubAgent, AgentType, ToolType,
     ChatMessage, ChatSession, AgentExecutionResult, ProjectConfiguration,
     LoginRequest, RegisterRequest, AuthResponse
 )
@@ -25,12 +27,9 @@ from .database import DatabaseManager
 from .auth_service import AuthService
 from .langfuse_service import LangfuseService
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Google ADK No-Code Platform",
-    description="A visual platform for building and testing Google ADK agents",
-    version="1.0.0"
-)
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize services
 db_manager = DatabaseManager()
@@ -40,6 +39,122 @@ langfuse_service = LangfuseService()
 
 # Get the directory of this file
 current_dir = Path(__file__).parent
+
+# Lifespan context manager for startup/shutdown events
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events"""
+    # Startup
+    try:
+        # Database is already initialized in DatabaseManager constructor
+        print("Database initialized successfully!")
+        
+        # Check if we have any existing data
+        existing_tools = db_manager.get_all_tools()
+        existing_agents = db_manager.get_all_agents()
+        
+        print(f"Found {len(existing_tools)} existing tools in database")
+        print(f"Found {len(existing_agents)} existing agents in database")
+        
+        if not existing_tools:
+            # Create sample tools if none exist
+            sample_tool = ToolDefinition(
+                id="sample_tool",
+                name="Sample Calculator",
+                description="A simple calculator tool that can perform basic arithmetic",
+                tool_type=ToolType.FUNCTION,
+                function_code="""
+def execute(expression: str) -> str:
+    try:
+        result = eval(expression)
+        return f"Result: {result}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+""",
+                tags=["math", "calculator"],
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat()
+            )
+            
+            if adk_service.register_tool(sample_tool):
+                db_manager.save_tool(sample_tool.model_dump())
+                print(f"Sample tool '{sample_tool.name}' created and saved to database")
+        
+        # Register built-in tools with ADK service
+        if adk_service.is_available():
+            print("Registering built-in tools...")
+            builtin_tools = adk_service.get_builtin_tools()
+            for tool_data in builtin_tools:
+                tool = ToolDefinition(**tool_data)
+                if adk_service.register_tool(tool):
+                    print(f"Registered built-in tool: {tool.name}")
+                else:
+                    print(f"Failed to register built-in tool: {tool.name}")
+        
+        if not existing_agents:
+            # Create sample agent if none exist
+            sample_agent = AgentConfiguration(
+                id="sample_agent",
+                name="Math_Assistant",
+                description="An AI assistant that helps with mathematical calculations",
+                agent_type=AgentType.LLM,
+                system_prompt="You are a helpful math assistant. You can perform calculations and explain mathematical concepts.",
+                sub_agents=[],
+                tools=["sample_tool"],
+                tags=["math", "assistant"],
+                model_settings={
+                    "model": "gemini-2.0-flash",
+                    "temperature": 0.7,
+                    "max_tokens": 1000
+                },
+                workflow_config=None,
+                ui_config={
+                    "position": {"x": 100, "y": 100},
+                    "size": {"width": 300, "height": 200},
+                    "color": "#4A90E2"
+                },
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat(),
+                is_enabled=True
+            )
+            
+            if adk_service.register_agent(sample_agent):
+                db_manager.save_agent(sample_agent.model_dump())
+                print(f"Sample agent '{sample_agent.name}' created and saved to database")
+            else:
+                print("Failed to register sample agent in ADK service")
+        else:
+            print(f"Found {len(existing_agents)} existing agents in database")
+        
+        print(f"Startup complete! Loaded {len(existing_tools)} tools and {len(existing_agents)} agents from database")
+        
+    except Exception as e:
+        print(f"Error during startup: {e}")
+        print("Continuing without sample data...")
+    
+    yield
+    
+    # Shutdown
+    print("Shutting down...")
+
+# Update FastAPI app initialization with lifespan
+app = FastAPI(
+    title="Google ADK No-Code Platform",
+    description="A visual platform for building and testing Google ADK agents",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware to allow frontend to access API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, restrict this to your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=str(current_dir / "static")), name="static")
@@ -255,12 +370,68 @@ async def delete_tool(tool_id: str):
 
 # Agent Management Endpoints
 @app.post("/api/agents")
-async def create_agent(agent: AgentConfiguration):
-    """Create a new agent"""
+async def create_agent(agent_request: AgentCreateRequest):
+    """Create a new agent with sub-agent support"""
     try:
-        agent.id = agent.id or str(uuid.uuid4())
-        agent.created_at = datetime.now().isoformat()
-        agent.updated_at = datetime.now().isoformat()
+        agent_id = agent_request.id or str(uuid.uuid4())
+        created_at = datetime.now().isoformat()
+        updated_at = datetime.now().isoformat()
+        
+        # Process sub-agents
+        sub_agents = []
+        
+        # Handle existing agents as sub-agents
+        if agent_request.sub_agents and agent_request.sub_agents.get('existing'):
+            for existing_agent_id in agent_request.sub_agents['existing']:
+                existing_agent = db_manager.get_agent(existing_agent_id)
+                if existing_agent:
+                    sub_agent = SubAgent(
+                        id=existing_agent_id,
+                        name=existing_agent['name'],
+                        agent_type=existing_agent['agent_type'],
+                        system_prompt=existing_agent.get('system_prompt', ''),
+                        instructions=existing_agent.get('instructions', ''),
+                        tools=existing_agent.get('tools', []),
+                        model_settings=existing_agent.get('model_settings', {}),
+                        is_enabled=True
+                    )
+                    sub_agents.append(sub_agent)
+        
+        # Handle new sub-agents
+        if agent_request.sub_agents and agent_request.sub_agents.get('new'):
+            for new_sub_agent_data in agent_request.sub_agents['new']:
+                sub_agent_id = str(uuid.uuid4())
+                sub_agent = SubAgent(
+                    id=sub_agent_id,
+                    name=new_sub_agent_data['name'],
+                    agent_type=new_sub_agent_data['type'],
+                    system_prompt=new_sub_agent_data.get('system_prompt', ''),
+                    instructions=new_sub_agent_data.get('description', ''),
+                    tools=[],
+                    model_settings={},
+                    is_enabled=True
+                )
+                sub_agents.append(sub_agent)
+        
+        # Create the main agent configuration
+        agent = AgentConfiguration(
+            id=agent_id,
+            name=agent_request.name,
+            description=agent_request.description,
+            agent_type=agent_request.agent_type,
+            system_prompt=agent_request.system_prompt,
+            instructions=agent_request.instructions,
+            sub_agents=sub_agents,
+            tools=agent_request.tools,
+            model_settings=agent_request.model_settings,
+            workflow_config=agent_request.workflow_config,
+            ui_config=agent_request.ui_config,
+            tags=agent_request.tags,
+            version=agent_request.version,
+            created_at=created_at,
+            updated_at=updated_at,
+            is_enabled=agent_request.is_enabled
+        )
         
         # Register agent in ADK service
         if adk_service.register_agent(agent):
@@ -284,7 +455,37 @@ async def list_agents():
     """List all agents"""
     try:
         agents = db_manager.get_all_agents()
+        print(f"API /api/agents called, returning {len(agents)} agents")
+        print(f"Agents: {agents}")
         return {"agents": agents}
+    except Exception as e:
+        print(f"Error in /api/agents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/available-for-sub")
+async def get_agents_for_sub_agents():
+    """Get all agents that can be used as sub-agents"""
+    try:
+        agents = db_manager.get_all_agents()
+        # Filter out agents that are already sub-agents of other agents
+        available_agents = []
+        for agent in agents:
+            # Check if this agent is already a sub-agent somewhere
+            is_sub_agent = False
+            for other_agent in agents:
+                if other_agent.get('sub_agents'):
+                    for sub_agent in other_agent['sub_agents']:
+                        if sub_agent.get('id') == agent['id']:
+                            is_sub_agent = True
+                            break
+                    if is_sub_agent:
+                        break
+            
+            if not is_sub_agent:
+                available_agents.append(agent)
+        
+        return {"agents": available_agents}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -293,10 +494,16 @@ async def list_agents():
 async def get_agent(agent_id: str):
     """Get a specific agent"""
     try:
-        agent = db_manager.get_agent(agent_id)
+        # Validate agent_id format
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        agent = db_manager.get_agent(agent_id.strip())
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         return agent
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -374,14 +581,30 @@ async def delete_agent(agent_id: str):
 async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
     """Chat with an agent"""
     try:
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        # Validate request payload
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+        
         # Check if agent exists in database
-        agent = db_manager.get_agent(agent_id)
+        agent = db_manager.get_agent(agent_id.strip())
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
+        # Validate and extract message
         prompt = request.get("message", "")
+        if not prompt or not prompt.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
         session_id = request.get("session_id")
         user_id = request.get("user_id", "anonymous")
+        
+        # Validate user_id if provided
+        if user_id and not isinstance(user_id, str):
+            raise HTTPException(status_code=400, detail="user_id must be a string")
         
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -494,40 +717,130 @@ async def get_project(project_id: str):
 @app.put("/api/projects/{project_id}")
 async def update_project(project_id: str, project: ProjectConfiguration):
     """Update a project"""
-    if project_id not in projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    project.id = project_id
-    project.updated_at = datetime.now().isoformat()
-    projects[project_id] = project
-    
-    return {"success": True, "project": project.model_dump()}
+    try:
+        # Check if project exists
+        existing_project = db_manager.get_project(project_id)
+        if not existing_project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project.id = project_id
+        project.updated_at = datetime.now().isoformat()
+        
+        # Save to database
+        project_data = project.model_dump()
+        if db_manager.save_project(project_data):
+            return {"success": True, "project": project_data}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update project in database")
+            
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
     """Delete a project"""
-    if project_id not in projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    del projects[project_id]
-    return {"success": True}
+    try:
+        # Check if project exists
+        existing_project = db_manager.get_project(project_id)
+        if not existing_project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Actually delete the project from the database
+        if db_manager.delete_project(project_id):
+            return {"success": True, "message": "Project deleted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete project")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# Code Generation Endpoints
-@app.post("/api/generate/{agent_id}")
-async def generate_agent_code(agent_id: str):
-    """Generate Python code for an agent"""
-    if agent_id not in agents:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    agent = agents[agent_id]
-    
-    # Generate Python code
-    code = f'''#!/usr/bin/env python3
+@app.post("/api/projects/{project_id}/export")
+async def export_project(project_id: str):
+    """Export project as a complete package"""
+    try:
+        project = db_manager.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Create export package
+        export_data = {
+            "project": project,
+            "agents": [],
+            "tools": []
+        }
+        
+        # Add agents
+        if project.get('agents'):
+            for agent_id in project['agents']:
+                agent = db_manager.get_agent(agent_id)
+                if agent:
+                    export_data["agents"].append(agent)
+        
+        # Add tools
+        if project.get('tools'):
+            for tool_id in project['tools']:
+                tool = db_manager.get_tool(tool_id)
+                if tool:
+                    export_data["tools"].append(tool)
+        
+        return {
+            "success": True,
+            "message": f"Project '{project['name']}' exported successfully",
+            "export_data": export_data,
+            "download_url": f"/api/projects/{project_id}/download"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export project: {str(e)}")
+
+
+@app.get("/api/projects/{project_id}/download")
+async def download_project(project_id: str):
+    """Download project as a ZIP file"""
+    try:
+        project = db_manager.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        import zipfile
+        import tempfile
+        
+        # Create temporary ZIP file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+            with zipfile.ZipFile(tmp_file.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add project metadata
+                project_meta = {
+                    "name": project['name'],
+                    "description": project['description'],
+                    "version": project.get('version', '1.0.0'),
+                    "created_at": project.get('created_at'),
+                    "agents_count": len(project.get('agents', [])),
+                    "tools_count": len(project.get('tools', []))
+                }
+                
+                # Create project.json
+                import json
+                project_json = json.dumps(project_meta, indent=2)
+                zipf.writestr("project.json", project_json)
+                
+                # Add agents
+                if project.get('agents'):
+                    for agent_id in project['agents']:
+                        agent = db_manager.get_agent(agent_id)
+                        if agent:
+                            agent_dir = f"agents/{agent_id}"
+                            zipf.writestr(f"{agent_dir}/config.json", json.dumps(agent, indent=2))
+                            
+                            # Generate agent code
+                            if agent.get('system_prompt'):
+                                agent_code = f'''#!/usr/bin/env python3
 """
-Generated agent: {agent.name}
-Description: {agent.description}
+Generated agent: {agent['name']}
+Description: {agent['description']}
 """
 
 import asyncio
@@ -535,17 +848,17 @@ from google.adk import LlmAgent
 from google.adk.models import GeminiModel
 
 async def main():
-    # Create model for {agent.name}
+    # Create model for {agent['name']}
     model = GeminiModel(
-        model_name='{agent.model_settings.get("model", "gemini-1.5-pro")}',
-        temperature={agent.model_settings.get("temperature", 0.7)},
-        max_output_tokens={agent.model_settings.get("max_tokens", 1000)}
+        model_name='{agent.get('model_settings', {}).get('model', 'gemini-1.5-pro')}',
+        temperature={agent.get('model_settings', {}).get('temperature', 0.7)},
+        max_output_tokens={agent.get('model_settings', {}).get('max_tokens', 1000)}
     )
     
-    # Create agent: {agent.name}
+    # Create agent: {agent['name']}
     agent = LlmAgent(
-        name='{agent.name}',
-        system_prompt='{agent.system_prompt}',
+        name='{agent['name']}',
+        system_prompt='{agent['system_prompt']}',
         model=model
     )
     
@@ -556,102 +869,33 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 '''
-    
-    return {"code": code, "filename": f"{agent.name.lower().replace(' ', '_')}.py"}
-
-
-@app.post("/api/export/project/{project_id}")
-async def export_project(project_id: str):
-    """Export a project as Python files"""
-    if project_id not in projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    project = projects[project_id]
-    
-    # Generate main project file
-    main_code = f'''#!/usr/bin/env python3
-"""
-Generated project: {project.name}
-Description: {project.description}
-"""
-
-import asyncio
-from pathlib import Path
-import sys
-
-# Add project modules to path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
-async def main():
-    print("ADK Project loaded successfully!")
-    print("Available agents:")
-'''
-    
-    for agent in project.agents:
-        main_code += f'    print("  - {agent.name}")\n'
-    
-    main_code += '''
-    # Example usage
-    # from agents import get_agent
-    # agent = get_agent("agent_name")
-    # response = await agent.generate_content("Hello!")
-    # print(response.text)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-'''
-    
-    # Generate agents module
-    agents_code = '''#!/usr/bin/env python3
-"""Generated agents module"""
-
-from google.adk import LlmAgent
-from google.adk.models import GeminiModel
-
-def get_agent(agent_name: str):
-    """Get an agent by name"""
-    agents = {
-'''
-    
-    for agent in project.agents:
-        agents_code += f'        "{agent.name}": create_{agent.id}_agent(),\n'
-    
-    agents_code += '''    }
-    return agents.get(agent_name)
-
-'''
-    
-    # Generate individual agent functions
-    for agent in project.agents:
-        agents_code += f'''
-def create_{agent.id}_agent():
-    """Create {agent.name} agent"""
-    model = Gemini(
-        model_name='{agent.model_settings.get("model", "gemini-2.0-flash")}',
-        temperature='{agent.model_settings.get("temperature", 0.7)}',
-        max_output_tokens='{agent.model_settings.get("max_tokens", 1000)}'
-    )
-    
-    agent = LlmAgent(
-        name='{agent.name}',
-        system_prompt='{agent.system_prompt}',
-        model=model
-    )
-    
-    return agent
-'''
-    
-    # Generate requirements
-    requirements = '''google-adk>=0.2.0
+                                zipf.writestr(f"{agent_dir}/agent.py", agent_code)
+                
+                # Add tools
+                if project.get('tools'):
+                    for tool_id in project['tools']:
+                        tool = db_manager.get_tool(tool_id)
+                        if tool:
+                            tool_dir = f"tools/{tool_id}"
+                            zipf.writestr(f"{tool_dir}/config.json", json.dumps(tool, indent=2))
+                            
+                            # Add tool code if available
+                            if tool.get('function_code'):
+                                zipf.writestr(f"{tool_dir}/tool.py", tool['function_code'])
+                
+                # Create requirements.txt
+                requirements = '''google-adk>=0.2.0
 google-genai>=0.3.0
 google-cloud-aiplatform>=1.38.0
+fastapi>=0.100.0
+uvicorn>=0.20.0
 '''
-    
-    # Generate README
-    readme = f'''# {project.name}
+                zipf.writestr("requirements.txt", requirements)
+                
+                # Create README
+                readme = f'''# {project['name']}
 
-{project.description}
+{project['description']}
 
 ## Installation
 
@@ -668,21 +912,293 @@ python main.py
 ## Available Agents
 
 '''
-    
-    for agent in project.agents:
-        readme += f'''### {agent.name}
-{agent.description}
+                
+                if project.get('agents'):
+                    for agent_id in project['agents']:
+                        agent = db_manager.get_agent(agent_id)
+                        if agent:
+                            readme += f'''### {agent['name']}
+{agent['description']}
 
 '''
+                
+                readme += '''
+## Project Structure
+
+- `agents/` - Contains all agent configurations and code
+- `tools/` - Contains all tool definitions and implementations
+- `project.json` - Project metadata and configuration
+- `requirements.txt` - Python dependencies
+- `README.md` - This file
+
+## Development
+
+This project was generated using the Google ADK No-Code Platform.
+'''
+                
+                zipf.writestr("README.md", readme)
+            
+            # Read the ZIP file and return it
+            with open(tmp_file.name, 'rb') as f:
+                zip_content = f.read()
+            
+            # Clean up temporary file
+            import os
+            os.unlink(tmp_file.name)
+            
+            return JSONResponse(
+                content=zip_content,
+                media_type="application/zip",
+                headers={"Content-Disposition": f"attachment; filename={project['name']}.zip"}
+            )
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download project: {str(e)}")
+
+
+# Enhanced Sub-Agents Management
+@app.get("/api/agents/{agent_id}/sub-agents")
+async def get_agent_sub_agents(agent_id: str):
+    """Get sub-agents for a specific agent"""
+    try:
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        sub_agents = agent.get('sub_agents', [])
+        return {"sub_agents": sub_agents}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/agents/{agent_id}/sub-agents")
+async def add_sub_agent_to_agent(agent_id: str, sub_agent: SubAgent):
+    """Add a sub-agent to an existing agent"""
+    try:
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Generate ID for sub-agent if not provided
+        if not sub_agent.id:
+            sub_agent.id = str(uuid.uuid4())
+        
+        # Add sub-agent to the agent's sub_agents list
+        if 'sub_agents' not in agent:
+            agent['sub_agents'] = []
+        
+        # Check if sub-agent with same name already exists
+        existing_names = [sa.get('name') for sa in agent['sub_agents']]
+        if sub_agent.name in existing_names:
+            raise HTTPException(status_code=400, detail=f"Sub-agent with name '{sub_agent.name}' already exists")
+        
+        # Add the new sub-agent
+        agent['sub_agents'].append(sub_agent.model_dump())
+        agent['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated agent
+        if db_manager.save_agent(agent):
+            return {"success": True, "message": f"Sub-agent '{sub_agent.name}' added successfully", "sub_agent": sub_agent.model_dump()}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save agent with new sub-agent")
+            
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/agents/available-for-sub")
+async def get_agents_available_for_sub():
+    """Get all agents that can be used as sub-agents"""
+    try:
+        # Try to get agents with basic error handling
+        try:
+            agents = db_manager.get_all_agents()
+            logger.info(f"Retrieved {len(agents) if agents else 0} agents from database")
+        except Exception as db_error:
+            logger.error(f"Database error in get_all_agents: {db_error}")
+            return {"available_agents": [], "error": "Database error"}
+        
+        if not agents:
+            logger.info("No agents found in database")
+            return {"available_agents": []}
+        
+        # Simple approach - just return all agents without complex filtering for now
+        available_agents = []
+        for agent in agents:
+            try:
+                # Basic agent info extraction with error handling
+                agent_info = {
+                    "id": agent.get('id', 'unknown'),
+                    "name": agent.get('name', 'Unknown'),
+                    "description": agent.get('description', ''),
+                    "agent_type": agent.get('agent_type', 'basic'),
+                    "tools": agent.get('tools', []) if isinstance(agent.get('tools'), list) else []
+                }
+                available_agents.append(agent_info)
+            except Exception as agent_error:
+                logger.warning(f"Failed to process agent: {agent_error}")
+                continue
+        
+        logger.info(f"Returning {len(available_agents)} available agents")
+        return {"available_agents": available_agents}
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in get_agents_available_for_sub: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        # Return a basic error response instead of raising HTTPException
+        return {"available_agents": [], "error": str(e)}
+
+
+@app.post("/api/agents/{agent_id}/sub-agents/from-existing")
+async def add_existing_agent_as_sub(agent_id: str, request: dict):
+    """Add an existing agent as a sub-agent to another agent"""
+    try:
+        source_agent_id = request.get('source_agent_id')
+        if not source_agent_id:
+            raise HTTPException(status_code=400, detail="source_agent_id is required")
+        
+        # Get the target agent (the one that will receive the sub-agent)
+        target_agent = db_manager.get_agent(agent_id)
+        if not target_agent:
+            raise HTTPException(status_code=404, detail="Target agent not found")
+        
+        # Get the source agent (the one that will become a sub-agent)
+        source_agent = db_manager.get_agent(source_agent_id)
+        if not source_agent:
+            raise HTTPException(status_code=404, detail="Source agent not found")
+        
+        # Check if source agent is already a sub-agent of target agent
+        if 'sub_agents' in target_agent:
+            for sub_agent in target_agent['sub_agents']:
+                if sub_agent.get('id') == source_agent_id:
+                    raise HTTPException(status_code=400, detail=f"Agent '{source_agent['name']}' is already a sub-agent")
+        
+        # Create sub-agent configuration from source agent
+        sub_agent = SubAgent(
+            id=source_agent_id,
+            name=source_agent['name'],
+            agent_type=source_agent['agent_type'],
+            system_prompt=source_agent.get('system_prompt', ''),
+            instructions=source_agent.get('instructions'),
+            tools=source_agent.get('tools', []),
+            model_settings=source_agent.get('model_settings', {}),
+            is_enabled=source_agent.get('is_enabled', True)
+        )
+        
+        # Add sub-agent to target agent
+        if 'sub_agents' not in target_agent:
+            target_agent['sub_agents'] = []
+        
+        target_agent['sub_agents'].append(sub_agent.model_dump())
+        target_agent['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated target agent
+        if db_manager.save_agent(target_agent):
+            return {
+                "success": True, 
+                "message": f"Agent '{source_agent['name']}' added as sub-agent to '{target_agent['name']}'",
+                "sub_agent": sub_agent.model_dump()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save agent with new sub-agent")
+            
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/agents/{agent_id}/sub-agents/{sub_agent_id}")
+async def remove_sub_agent(agent_id: str, sub_agent_id: str):
+    """Remove a sub-agent from an agent"""
+    try:
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        if 'sub_agents' not in agent:
+            raise HTTPException(status_code=404, detail="Agent has no sub-agents")
+        
+        # Find and remove the sub-agent
+        sub_agents = agent['sub_agents']
+        sub_agent_found = False
+        
+        for i, sub_agent in enumerate(sub_agents):
+            if sub_agent.get('id') == sub_agent_id:
+                removed_sub_agent = sub_agents.pop(i)
+                sub_agent_found = True
+                break
+        
+        if not sub_agent_found:
+            raise HTTPException(status_code=404, detail="Sub-agent not found")
+        
+        # Update agent
+        agent['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated agent
+        if db_manager.save_agent(agent):
+            return {
+                "success": True, 
+                "message": f"Sub-agent '{removed_sub_agent.get('name')}' removed successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save agent after removing sub-agent")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Code Generation Endpoints
+@app.post("/api/generate/{agent_id}")
+async def generate_agent_code(agent_id: str):
+    """Generate Python code for an agent"""
+    try:
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Generate Python code
+        code = f'''#!/usr/bin/env python3
+"""
+Generated agent: {agent['name']}
+Description: {agent['description']}
+"""
+
+import asyncio
+from google.adk import LlmAgent
+from google.adk.models import GeminiModel
+
+async def main():
+    # Create model for {agent['name']}
+    model = GeminiModel(
+        model_name='{agent.get('model_settings', {}).get('model', 'gemini-1.5-pro')}',
+        temperature={agent.get('model_settings', {}).get('temperature', 0.7)},
+        max_output_tokens={agent.get('model_settings', {}).get('max_tokens', 1000)}
+    )
     
-    return {
-        "files": {
-            "main.py": main_code,
-            "agents.py": agents_code,
-            "requirements.txt": requirements,
-            "README.md": readme
-        }
-    }
+    # Create agent: {agent['name']}
+    agent = LlmAgent(
+        name='{agent['name']}',
+        system_prompt='{agent.get('system_prompt', '')}',
+        model=model
+    )
+    
+    # Execute agent
+    response = await agent.generate_content("Hello, agent!")
+    print(response.text)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+'''
+        
+        return {"code": code, "filename": f"{agent['name'].lower().replace(' ', '_')}.py"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate agent code: {str(e)}")
 
 
 # AI Suggestion Endpoints
@@ -811,87 +1327,6 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             "error": str(e)
         }))
         await websocket.close()
-
-
-# Initialize with sample data
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and load existing data on startup"""
-    try:
-        # Database is already initialized in DatabaseManager constructor
-        print("Database initialized successfully!")
-        
-        # Check if we have any existing data
-        existing_tools = db_manager.get_all_tools()
-        existing_agents = db_manager.get_all_agents()
-        
-        print(f"Found {len(existing_tools)} existing tools in database")
-        print(f"Found {len(existing_agents)} existing agents in database")
-        
-        if not existing_tools:
-            # Create sample tools if none exist
-            sample_tool = ToolDefinition(
-                id="sample_tool",
-                name="Sample Calculator",
-                description="A simple calculator tool that can perform basic arithmetic",
-                tool_type=ToolType.FUNCTION,
-                function_code="""
-def execute(expression: str) -> str:
-    try:
-        result = eval(expression)
-        return f"Result: {result}"
-    except Exception as e:
-        return f"Error: {str(e)}"
-""",
-                tags=["math", "calculator"]
-            )
-            
-            if adk_service.register_tool(sample_tool):
-                db_manager.save_tool(sample_tool.model_dump())
-                print(f"Sample tool '{sample_tool.name}' created and saved to database")
-        
-        # Register built-in tools with ADK service
-        if adk_service.is_available():
-            print("Registering built-in tools...")
-            builtin_tools = adk_service.get_builtin_tools()
-            for tool_data in builtin_tools:
-                tool = ToolDefinition(**tool_data)
-                if adk_service.register_tool(tool):
-                    print(f"Registered built-in tool: {tool.name}")
-                else:
-                    print(f"Failed to register built-in tool: {tool.name}")
-        
-        if not existing_agents:
-            # Create sample agent if none exist
-            sample_agent = AgentConfiguration(
-                id="sample_agent",
-                name="Math_Assistant",
-                description="An AI assistant that helps with mathematical calculations",
-                agent_type=AgentType.LLM,
-                system_prompt="You are a helpful math assistant. You can perform calculations and explain mathematical concepts.",
-                tools=["sample_tool"],
-                tags=["math", "assistant"],
-                model_settings={
-                    "model": "gemini-2.0-flash",
-                    "temperature": 0.7,
-                    "max_tokens": 1000
-                },
-                is_enabled=True
-            )
-            
-            if adk_service.register_agent(sample_agent):
-                db_manager.save_agent(sample_agent.model_dump())
-                print(f"Sample agent '{sample_agent.name}' created and saved to database")
-            else:
-                print("Failed to register sample agent in ADK service")
-        else:
-            print(f"Found {len(existing_agents)} existing agents in database")
-        
-        print(f"Startup complete! Loaded {len(existing_tools)} tools and {len(existing_agents)} agents from database")
-        
-    except Exception as e:
-        print(f"Error during startup: {e}")
-        print("Continuing without sample data...")
 
 
 if __name__ == "__main__":
