@@ -63,6 +63,9 @@
                     <a href="#projects" class="nav-link" data-section="projects">
                         <i class="fas fa-project-diagram mr-2"></i>Projects
                     </a>
+                    <a href="#sub-agents" class="nav-link" data-section="sub-agents">
+                        <i class="fas fa-sitemap mr-2"></i>Sub-Agents
+                    </a>
                     <a href="#chat" class="nav-link" data-section="chat">
                         <i class="fas fa-comments mr-2"></i>Chat
                     </a>
@@ -216,15 +219,35 @@
                                 <p class="text-sm text-gray-500">Test your agents</p>
                             </div>
                         </button>
+                        
+                        <button data-section="sub-agents" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                            <div class="h-10 w-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-sitemap text-indigo-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium">Manage Sub-Agents</p>
+                                <p class="text-sm text-gray-500">Build multi-agent systems</p>
+                            </div>
+                        </button>
                     </div>
                 </div>
 
                 <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-                    <div class="space-y-3" id="recentActivity">
-                        <div class="flex items-center text-sm text-gray-600">
-                            <div class="h-2 w-2 bg-blue-500 rounded-full mr-3"></div>
-                            <span>No recent activity</span>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Agents</h3>
+                    <div class="space-y-3" id="recentAgents">
+                        <div class="text-center text-gray-500 py-4">
+                            <i class="fas fa-robot text-2xl mb-2"></i>
+                            <p class="text-sm">Loading agents...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Tools</h3>
+                    <div class="space-y-3" id="recentTools">
+                        <div class="text-center text-gray-500 py-4">
+                            <i class="fas fa-tools text-2xl mb-2"></i>
+                            <p class="text-sm">Loading tools...</p>
                         </div>
                     </div>
                 </div>
@@ -270,6 +293,37 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="projectsGrid">
                 <!-- Projects will be populated here -->
+            </div>
+        </div>
+
+        <!-- Sub-Agents Section -->
+        <div id="sub-agents" class="section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Sub-Agents Management</h2>
+                <div class="flex space-x-2">
+                    <button id="addSubAgentBtn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Add Sub-Agent
+                    </button>
+                    <button id="addExistingAsSubBtn" class="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-link mr-2"></i>Link Existing Agent
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="mb-6">
+                    <label for="parentAgentSelect" class="block text-sm font-medium text-gray-700 mb-2">Select Parent Agent:</label>
+                    <select id="parentAgentSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Choose an agent...</option>
+                    </select>
+                </div>
+
+                <div id="subAgentsList" class="space-y-4">
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fas fa-sitemap text-4xl mb-4"></i>
+                        <p>Select a parent agent to view and manage sub-agents</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -382,6 +436,37 @@
                         </div>
                     </div>
                     
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Sub-Agents</label>
+                        <div class="space-y-3">
+                            <!-- Sub-Agents Selection -->
+                            <div class="border border-gray-300 rounded-md p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-700">Existing Agents as Sub-Agents</span>
+                                    <button type="button" id="addExistingAsSubInAgentBtn" class="text-sm text-primary hover:text-primary/80">
+                                        <i class="fas fa-plus mr-1"></i>Add Existing
+                                    </button>
+                                </div>
+                                <div id="existingSubAgentsSelection" class="max-h-32 overflow-y-auto">
+                                    <!-- Existing agents will be populated here -->
+                                </div>
+                            </div>
+                            
+                            <!-- New Sub-Agent Creation -->
+                            <div class="border border-gray-300 rounded-md p-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-700">Create New Sub-Agent</span>
+                                    <button type="button" id="addNewSubAgentInAgentBtn" class="text-sm text-primary hover:text-primary/80">
+                                        <i class="fas fa-plus mr-1"></i>Add New
+                                    </button>
+                                </div>
+                                <div id="newSubAgentsContainer" class="space-y-3">
+                                    <!-- New sub-agents will be added here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Model</label>
@@ -415,6 +500,38 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Select Existing Agent as Sub-Agent Modal -->
+    <div id="selectExistingAgentModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Select Existing Agent as Sub-Agent</h3>
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Available Agents</label>
+                        <div id="availableAgentsList" class="max-h-64 overflow-y-auto border border-gray-300 rounded-md p-3">
+                            <!-- Available agents will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" id="cancelSelectExistingBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="button" id="confirmSelectExistingBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Add Selected
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -530,6 +647,88 @@
                         </button>
                         <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
                             Create Project
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sub-Agent Modal -->
+    <div id="subAgentModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Add New Sub-Agent</h3>
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="subAgentForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Sub-Agent Name</label>
+                        <input type="text" id="subAgentName" name="subAgentName" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea id="subAgentDescription" name="subAgentDescription" rows="2" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Agent Type</label>
+                        <select id="subAgentType" name="subAgentType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="llm">LLM Agent</option>
+                            <option value="function">Function Agent</option>
+                            <option value="workflow">Workflow Agent</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">System Prompt</label>
+                        <textarea id="subAgentSystemPrompt" name="subAgentSystemPrompt" rows="3" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" id="cancelSubAgentBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Add Sub-Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link Existing Agent Modal -->
+    <div id="linkExistingAgentModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Link Existing Agent as Sub-Agent</h3>
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="linkExistingAgentForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Select Agent to Link</label>
+                        <select id="existingAgentSelect" name="existingAgentSelect" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="">Choose an agent...</option>
+                        </select>
+                        <p class="text-sm text-gray-600 mt-1">This will add the selected agent as a sub-agent to the current parent agent.</p>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <button type="button" id="cancelLinkExistingBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
+                            Link Agent
                         </button>
                     </div>
                 </form>

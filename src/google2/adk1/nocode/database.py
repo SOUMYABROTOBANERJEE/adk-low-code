@@ -139,10 +139,13 @@ class DatabaseManager:
         """Deserialize JSON string to data"""
         if data is None:
             return None
+        if isinstance(data, (dict, list)):
+            return data
         try:
             return json.loads(data)
-        except:
-            return data
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to deserialize JSON data: {e}, data: {data}")
+            return None
     
     # Tool Management
     def save_tool(self, tool_data: Dict[str, Any]) -> bool:
@@ -370,14 +373,51 @@ class DatabaseManager:
                 columns = [description[0] for description in cursor.description]
                 
                 for row in rows:
-                    agent_data = dict(zip(columns, row))
-                    agent_data['sub_agents'] = self._deserialize_json(agent_data['sub_agents'])
-                    agent_data['tools'] = self._deserialize_json(agent_data['tools'])
-                    agent_data['model_settings'] = self._deserialize_json(agent_data['model_settings'])
-                    agent_data['workflow_config'] = self._deserialize_json(agent_data['workflow_config'])
-                    agent_data['ui_config'] = self._serialize_json(agent_data['ui_config'])
-                    agent_data['tags'] = self._deserialize_json(agent_data['tags'])
-                    agents.append(agent_data)
+                    try:
+                        agent_data = dict(zip(columns, row))
+                        
+                        # Safely deserialize JSON fields with error handling
+                        try:
+                            agent_data['sub_agents'] = self._deserialize_json(agent_data.get('sub_agents'))
+                        except Exception as e:
+                            logger.warning(f"Failed to deserialize sub_agents for agent {agent_data.get('id')}: {e}")
+                            agent_data['sub_agents'] = []
+                        
+                        try:
+                            agent_data['tools'] = self._deserialize_json(agent_data.get('tools'))
+                        except Exception as e:
+                            logger.warning(f"Failed to deserialize tools for agent {agent_data.get('id')}: {e}")
+                            agent_data['tools'] = []
+                        
+                        try:
+                            agent_data['model_settings'] = self._deserialize_json(agent_data.get('model_settings'))
+                        except Exception as e:
+                            logger.warning(f"Failed to deserialize model_settings for agent {agent_data.get('id')}: {e}")
+                            agent_data['model_settings'] = {}
+                        
+                        try:
+                            agent_data['workflow_config'] = self._deserialize_json(agent_data.get('workflow_config'))
+                        except Exception as e:
+                            logger.warning(f"Failed to deserialize workflow_config for agent {agent_data.get('id')}: {e}")
+                            agent_data['workflow_config'] = {}
+                        
+                        try:
+                            agent_data['ui_config'] = self._deserialize_json(agent_data.get('ui_config'))
+                        except Exception as e:
+                            logger.warning(f"Failed to deserialize ui_config for agent {agent_data.get('id')}: {e}")
+                            agent_data['ui_config'] = {}
+                        
+                        try:
+                            agent_data['tags'] = self._deserialize_json(agent_data.get('tags'))
+                        except Exception as e:
+                            logger.warning(f"Failed to deserialize tags for agent {agent_data.get('id')}: {e}")
+                            agent_data['tags'] = []
+                        
+                        agents.append(agent_data)
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process agent row: {e}, row: {row}")
+                        continue
                 
                 return agents
                 
@@ -493,6 +533,19 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting project: {e}")
             return None
+    
+    def delete_project(self, project_id: str) -> bool:
+        """Delete a project by ID"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+                
+        except Exception as e:
+            logger.error(f"Error deleting project: {e}")
+            return False
     
     # Chat Session Management
     def save_chat_session(self, session_data: Dict[str, Any]) -> bool:
