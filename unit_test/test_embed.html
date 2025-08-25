@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Agent Embed</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #2196f3;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #1976d2;
+        }
+        .instructions code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .embed-demo {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            background: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Agent Embed</h1>
+        
+        <div class="instructions">
+            <h3>📋 Instructions for Testing</h3>
+            <p>To test the agent embed functionality:</p>
+            <ol>
+                <li><strong>Start your ADK platform</strong> - Make sure your FastAPI server is running</li>
+                <li><strong>Create an agent</strong> - Use the ADK platform to create a test agent</li>
+                <li><strong>Generate embed code</strong> - Click "Create Embed" for your agent</li>
+                <li><strong>Copy the embed code</strong> - Copy the generated HTML code</li>
+                <li><strong>Replace the placeholder below</strong> - Replace the demo content with your embed code</li>
+                <li><strong>Update the domain</strong> - Make sure to replace <code>YOUR_DOMAIN</code> with your actual domain (e.g., <code>http://localhost:8000</code> for local testing)</li>
+            </ol>
+        </div>
+
+        <h2>🔗 Agent Embed Demo</h2>
+        <p>Replace the content below with your actual agent embed code:</p>
+        
+        <div class="embed-demo">
+            <h3>📝 Your Agent Embed Will Appear Here</h3>
+            <p>After you create an agent and generate embed code, replace this section with the actual embed HTML.</p>
+            <p><strong>Example:</strong></p>
+            <pre style="text-align: left; background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto;">
+&lt;!-- Your Agent Embed Code --&gt;
+&lt;div id="adk-agent-embed_123_abc123" style="width: 100%; max-width: 600px; margin: 0 auto;"&gt;
+    &lt;iframe 
+        src="http://localhost:8000/api/embed/embed_123_abc123" 
+        width="100%" 
+        height="600" 
+        frameborder="0" 
+        scrolling="no"
+        style="border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"&gt;
+    &lt;/iframe&gt;
+&lt;/div&gt;</pre>
+        </div>
+
+        <div class="instructions">
+            <h3>⚠️ Important Notes</h3>
+            <ul>
+                <li><strong>Domain Configuration:</strong> Make sure to replace <code>YOUR_DOMAIN</code> with your actual ADK platform URL</li>
+                <li><strong>Local Testing:</strong> Use <code>http://localhost:8000</code> if testing locally</li>
+                <li><strong>Production:</strong> Use your actual domain (e.g., <code>https://yourdomain.com</code>) for production embeds</li>
+                <li><strong>CORS:</strong> Ensure your ADK platform allows requests from the domain where you're embedding</li>
+            </ul>
+        </div>
+
+        <h2>🔧 Troubleshooting</h2>
+        <p>If the send button doesn't work:</p>
+        <ul>
+            <li>Check the browser console for JavaScript errors</li>
+            <li>Verify the domain in the embed code matches your ADK platform</li>
+            <li>Ensure your ADK platform is running and accessible</li>
+            <li>Check that the agent is enabled and the embed is active</li>
+        </ul>
+    </div>
+</body>
+</html>

@@ -40,17 +40,17 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <!-- Logo and Brand -->
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-4 min-w-0">
                     <!-- Tata Steel Logo -->
-                    <img src="/static/tata-steel-555x290.png" alt="Tata Steel Logo" class="h-10 w-auto logo-tata-steel">
-                    <div>
-                        <h1 class="text-xl font-bold text-gray-900">Agent Genie</h1>
-                        <p class="text-xs text-gray-500">Powered by Tata Steel AI</p>
+                    <img src="/static/tata-steel-555x290.png" alt="Tata Steel Logo" class="h-10 w-auto logo-tata-steel flex-shrink-0">
+                    <div class="min-w-0">
+                        <h1 class="text-xl font-bold text-gray-900 truncate">Agent Genie</h1>
+                        <p class="text-xs text-gray-500 truncate">Powered by Tata Steel AI</p>
                     </div>
                 </div>
 
                 <!-- Navigation Menu -->
-                <div class="hidden md:flex items-center space-x-8">
+                <div class="hidden md:flex items-center space-x-4 lg:space-x-6 xl:space-x-8 flex-shrink-0">
                     <a href="#dashboard" class="nav-link active" data-section="dashboard">
                         <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
                     </a>
@@ -66,13 +66,17 @@
                     <a href="#sub-agents" class="nav-link" data-section="sub-agents">
                         <i class="fas fa-sitemap mr-2"></i>Sub-Agents
                     </a>
+                    <a href="#embeds" class="nav-link" data-section="embeds">
+                        <i class="fas fa-code mr-2"></i>Embeds
+                    </a>
                     <a href="#chat" class="nav-link" data-section="chat">
                         <i class="fas fa-comments mr-2"></i>Chat
                     </a>
                 </div>
 
                 <!-- User Menu -->
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-3 lg:space-x-4 flex-shrink-0">
+                    <!-- Notifications -->
                     <div class="relative">
                         <button id="notificationsBtn" class="p-2 text-gray-400 hover:text-gray-600 transition-colors relative">
                             <i class="fas fa-bell text-lg"></i>
@@ -80,18 +84,22 @@
                         </button>
                     </div>
                     
-                    <div class="relative">
-                        <div id="adkStatus" class="flex items-center space-x-2 mr-4">
-                            <div class="w-3 h-3 rounded-full status-indicator online"></div>
-                            <span class="text-sm text-gray-600">ADK Available</span>
+                    <!-- ADK Status -->
+                    <div class="hidden sm:flex items-center space-x-2 mr-2">
+                        <div id="adkStatus" class="flex items-center space-x-2">
+                            <div class="w-3 h-3 rounded-full status-indicator"></div>
+                            <span class="text-sm text-gray-600 whitespace-nowrap">Checking ADK...</span>
                         </div>
-                        
+                    </div>
+                    
+                    <!-- User Profile -->
+                    <div class="relative">
                         <button id="userMenuBtn" class="flex items-center space-x-2 text-gray-700 hover:text-gray-900 transition-colors">
-                            <div class="h-8 w-8 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center">
-                                <span class="text-white text-sm font-medium">D</span>
+                            <div class="h-8 w-8 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center flex-shrink-0">
+                                <span class="text-white text-sm font-medium">T</span>
                             </div>
-                            <span class="hidden md:block text-sm font-medium" id="userDisplayName">Tata Steel User</span>
-                            <i class="fas fa-chevron-down text-xs"></i>
+                            <span class="hidden lg:block text-sm font-medium truncate max-w-24" id="userDisplayName">Tata Steel User</span>
+                            <i class="fas fa-chevron-down text-xs flex-shrink-0"></i>
                         </button>
                         
                         <!-- User Dropdown -->
@@ -121,13 +129,13 @@
         <!-- Dashboard Section -->
         <div id="dashboard" class="section active">
             <!-- Welcome Header -->
-            <div class="bg-gradient-to-r from-primary to-secondary rounded-2xl p-8 text-white mb-8">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h1 class="text-3xl font-bold mb-2">Welcome to Agent Genie! 👋</h1>
-                        <p class="text-blue-100 text-lg">Powered by Tata Steel AI - Build amazing AI agents today!</p>
+            <div class="bg-gradient-to-r from-primary to-secondary rounded-2xl p-6 lg:p-8 text-white mb-8">
+                <div class="flex flex-col lg:flex-row items-center justify-between space-y-4 lg:space-y-0">
+                    <div class="text-center lg:text-left">
+                        <h1 class="text-2xl lg:text-3xl font-bold mb-2">Welcome to Agent Genie! 👋</h1>
+                        <p class="text-blue-100 text-base lg:text-lg">Powered by Tata Steel AI - Build amazing AI agents today!</p>
                     </div>
-                    <div class="hidden md:block">
+                    <div class="hidden lg:block">
                         <!-- Tata Steel Logo in Welcome Section -->
                         <img src="/static/tata-steel-555x290.png" alt="Tata Steel Logo" class="h-20 w-auto opacity-90 logo-tata-steel">
                     </div>
@@ -135,120 +143,116 @@
             </div>
 
             <!-- Quick Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
+                <div class="bg-white rounded-xl p-4 lg:p-6 shadow-sm border border-gray-200">
                     <div class="flex items-center">
-                        <div class="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-robot text-blue-600 text-xl"></i>
+                        <div class="h-10 w-10 lg:h-12 lg:w-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-robot text-blue-600 text-lg lg:text-xl"></i>
                         </div>
-                        <div class="ml-4">
+                        <div class="ml-3 lg:ml-4 min-w-0">
                             <p class="text-sm font-medium text-gray-600">Total Agents</p>
-                            <p class="text-2xl font-bold text-gray-900" id="agentCount">0</p>
+                            <p class="text-xl lg:text-2xl font-bold text-gray-900" id="agentCount">0</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="bg-white rounded-xl p-4 lg:p-6 shadow-sm border border-gray-200">
                     <div class="flex items-center">
-                        <div class="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-tools text-green-600 text-xl"></i>
+                        <div class="h-10 w-10 lg:h-12 lg:w-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-tools text-green-600 text-lg lg:text-xl"></i>
                         </div>
-                        <div class="ml-4">
+                        <div class="ml-3 lg:ml-4 min-w-0">
                             <p class="text-sm font-medium text-gray-600">Total Tools</p>
-                            <p class="text-2xl font-bold text-gray-900" id="toolCount">0</p>
+                            <p class="text-xl lg:text-2xl font-bold text-gray-900" id="toolCount">0</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="bg-white rounded-xl p-4 lg:p-6 shadow-sm border border-gray-200">
                     <div class="flex items-center">
-                        <div class="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-comments text-purple-600 text-xl"></i>
+                        <div class="h-10 w-10 lg:h-12 lg:w-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-comments text-purple-600 text-lg lg:text-xl"></i>
                         </div>
-                        <div class="ml-4">
+                        <div class="ml-3 lg:ml-4 min-w-0">
                             <p class="text-sm font-medium text-gray-600">Chat Sessions</p>
-                            <p class="text-2xl font-bold text-gray-900" id="chatCount">0</p>
+                            <p class="text-xl lg:text-2xl font-bold text-gray-900" id="chatCount">0</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="bg-white rounded-xl p-4 lg:p-6 shadow-sm border border-gray-200">
                     <div class="flex items-center">
-                        <div class="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-project-diagram text-orange-600 text-xl"></i>
+                        <div class="h-10 w-10 lg:h-12 lg:w-12 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-code text-orange-600 text-lg lg:text-xl"></i>
                         </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Projects</p>
-                            <p class="text-2xl font-bold text-gray-900" id="projectCount">0</p>
+                        <div class="ml-3 lg:ml-4 min-w-0">
+                            <p class="text-sm font-medium text-gray-600">Active Embeds</p>
+                            <p class="text-xl lg:text-2xl font-bold text-gray-900" id="embedCount">0</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Quick Actions -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-8">
+                <button id="dashboardCreateAgentBtn" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-6 rounded-xl shadow-sm transition-all duration-200 transform hover:scale-105">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-4">
+                            <i class="fas fa-plus text-2xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="text-lg font-semibold">Create Agent</h3>
+                            <p class="text-blue-100 text-sm">Build a new AI agent</p>
+                        </div>
+                    </div>
+                </button>
+
+                <button id="dashboardCreateToolBtn" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white p-6 rounded-xl shadow-sm transition-all duration-200 transform hover:scale-105">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-4">
+                            <i class="fas fa-plus text-2xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="text-lg font-semibold">Create Tool</h3>
+                            <p class="text-green-100 text-sm">Add new functionality</p>
+                        </div>
+                    </div>
+                </button>
+
+                <button id="dashboardStartChatBtn" class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white p-6 rounded-xl shadow-sm transition-all duration-200 transform hover:scale-105">
+                    <div class="flex items-center">
+                        <div class="h-12 w-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-4">
+                            <i class="fas fa-comments text-2xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="text-lg font-semibold">Start Chat</h3>
+                            <p class="text-purple-100 text-sm">Talk to your agents</p>
+                        </div>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Recent Content -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+                <!-- Recent Agents -->
                 <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                    <div class="space-y-3">
-                        <button id="dashboardCreateAgentBtn" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                            <div class="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-plus text-blue-600"></i>
-                            </div>
-                            <div>
-                                <p class="font-medium">Create New Agent</p>
-                                <p class="text-sm text-gray-500">Build a new AI agent</p>
-                            </div>
-                        </button>
-                        
-                        <button id="dashboardCreateToolBtn" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                            <div class="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-plus text-green-600"></i>
-                            </div>
-                            <div>
-                                <p class="font-medium">Create New Tool</p>
-                                <p class="text-sm text-gray-500">Build a custom tool</p>
-                            </div>
-                        </button>
-                        
-                        <button data-section="chat" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                            <div class="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-comment text-purple-600"></i>
-                            </div>
-                            <div>
-                                <p class="font-medium">Start Chat</p>
-                                <p class="text-sm text-gray-500">Test your agents</p>
-                            </div>
-                        </button>
-                        
-                        <button data-section="sub-agents" class="w-full flex items-center p-3 text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                            <div class="h-10 w-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-sitemap text-indigo-600"></i>
-                            </div>
-                            <div>
-                                <p class="font-medium">Manage Sub-Agents</p>
-                                <p class="text-sm text-gray-500">Build multi-agent systems</p>
-                            </div>
-                        </button>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Recent Agents</h3>
+                        <button onclick="showSection('agents')" class="text-primary hover:text-primary-dark text-sm font-medium">View All</button>
+                    </div>
+                    <div id="recentAgents" class="space-y-3">
+                        <p class="text-gray-500 text-sm">No agents created yet</p>
                     </div>
                 </div>
 
+                <!-- Recent Tools -->
                 <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Agents</h3>
-                    <div class="space-y-3" id="recentAgents">
-                        <div class="text-center text-gray-500 py-4">
-                            <i class="fas fa-robot text-2xl mb-2"></i>
-                            <p class="text-sm">Loading agents...</p>
-                        </div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Recent Tools</h3>
+                        <button onclick="showSection('tools')" class="text-primary hover:text-primary-dark text-sm font-medium">View All</button>
                     </div>
-                </div>
-                
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Tools</h3>
-                    <div class="space-y-3" id="recentTools">
-                        <div class="text-center text-gray-500 py-4">
-                            <i class="fas fa-tools text-2xl mb-2"></i>
-                            <p class="text-sm">Loading tools...</p>
-                        </div>
+                    <div id="recentTools" class="space-y-3">
+                        <p class="text-gray-500 text-sm">No tools created yet</p>
                     </div>
                 </div>
             </div>
@@ -322,6 +326,30 @@
                     <div class="text-center text-gray-500 py-8">
                         <i class="fas fa-sitemap text-4xl mb-4"></i>
                         <p>Select a parent agent to view and manage sub-agents</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Embeds Section -->
+        <div id="embeds" class="section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Agent Embeds</h2>
+                <p class="text-gray-600">Embed your agents on any website with a unique URL</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="mb-6">
+                    <label for="embedAgentSelect" class="block text-sm font-medium text-gray-700 mb-2">Select Agent to Embed:</label>
+                    <select id="embedAgentSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">Choose an agent...</option>
+                    </select>
+                </div>
+
+                <div id="embedsList" class="space-y-4">
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fas fa-code text-4xl mb-4"></i>
+                        <p>Select an agent to view and manage its embeds</p>
                     </div>
                 </div>
             </div>
@@ -433,6 +461,30 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tools</label>
                         <div id="agentToolsSelection" class="border border-gray-300 rounded-md p-3 max-h-32 overflow-y-auto">
                             <!-- Tools will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Embed Options</label>
+                        <div class="border border-gray-300 rounded-md p-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-600">Make this agent embeddable on any website</span>
+                                <button type="button" id="createEmbedBtn" class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                                    <i class="fas fa-code mr-1"></i>Create Embed
+                                </button>
+                            </div>
+                            <div id="embedCodeContainer" class="mt-3 hidden">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Embed Code:</label>
+                                <textarea id="embedCode" rows="6" class="w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-sm font-mono" readonly></textarea>
+                                <div class="mt-2 flex space-x-2">
+                                    <button type="button" id="copyEmbedCodeBtn" class="px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                                        <i class="fas fa-copy mr-1"></i>Copy Code
+                                    </button>
+                                    <button type="button" id="previewEmbedBtn" class="px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors">
+                                        <i class="fas fa-eye mr-1"></i>Preview
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     

@@ -190,6 +190,17 @@ async def health_check():
 async def register_user(request: RegisterRequest, req: Request):
     """Register a new user"""
     try:
+        # Validate request
+        if not request.email or not request.email.strip():
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        if not request.password or len(request.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        
+        # Validate email format (basic)
+        if '@' not in request.email or '.' not in request.email:
+            raise HTTPException(status_code=400, detail="Invalid email format")
+        
         # Get client IP and user agent
         client_ip = req.client.host if req.client else None
         user_agent = req.headers.get("user-agent")
@@ -199,19 +210,37 @@ async def register_user(request: RegisterRequest, req: Request):
         
         # Trace user registration
         if response.success and response.user:
-            langfuse_service.trace_user_action(
-                user_id=response.user.id,
-                action="user_registration",
-                details={
-                    "email": request.email,
+            # Create user profile in Langfuse
+            langfuse_service.create_user_profile(
+                user_id=request.email.strip(),
+                user_data={
+                    "email": request.email.strip(),
+                    "internal_id": response.user.id,
+                    "registration_date": datetime.now().isoformat(),
                     "ip_address": client_ip,
                     "user_agent": user_agent
                 }
             )
+            
+            # Trace user registration action
+            langfuse_service.trace_user_action(
+                user_id=request.email.strip(),  # Use email as user_id for Langfuse
+                action="user_registration",
+                details={
+                    "email": request.email.strip(),
+                    "ip_address": client_ip,
+                    "user_agent": user_agent,
+                    "user_id": response.user.id  # Store internal user ID in details
+                }
+            )
         
+        logger.info(f"User registration: {request.email.strip()}")
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in user registration: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -219,6 +248,13 @@ async def register_user(request: RegisterRequest, req: Request):
 async def login_user(request: LoginRequest, req: Request):
     """Authenticate user and create session"""
     try:
+        # Validate request
+        if not request.email or not request.email.strip():
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        if not request.password:
+            raise HTTPException(status_code=400, detail="Password is required")
+        
         # Get client IP and user agent
         client_ip = req.client.host if req.client else None
         user_agent = req.headers.get("user-agent")
@@ -228,19 +264,40 @@ async def login_user(request: LoginRequest, req: Request):
         
         # Trace user login
         if response.success and response.user:
-            langfuse_service.trace_user_action(
-                user_id=response.user.id,
-                action="user_login",
-                details={
-                    "email": request.email,
+            # Create user session in Langfuse
+            session_id = str(uuid.uuid4())
+            langfuse_service.create_user_session(
+                user_id=request.email.strip(),
+                session_id=session_id,
+                user_metadata={
+                    "email": request.email.strip(),
+                    "internal_id": response.user.id,
+                    "login_time": datetime.now().isoformat(),
                     "ip_address": client_ip,
                     "user_agent": user_agent
                 }
             )
+            
+            # Trace user login action
+            langfuse_service.trace_user_action(
+                user_id=request.email.strip(),  # Use email as user_id for Langfuse
+                action="user_login",
+                details={
+                    "email": request.email.strip(),
+                    "ip_address": client_ip,
+                    "user_agent": user_agent,
+                    "user_id": response.user.id,  # Store internal user ID in details
+                    "session_id": session_id
+                }
+            )
         
+        logger.info(f"User login: {request.email.strip()}")
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in user login: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -248,12 +305,35 @@ async def login_user(request: LoginRequest, req: Request):
 async def logout_user(session_token: str):
     """Logout user by invalidating session"""
     try:
-        success = auth_service.logout_user(session_token)
+        # Validate session token
+        if not session_token or not session_token.strip():
+            raise HTTPException(status_code=400, detail="Session token is required")
+        
+        # Get user info before logout for tracking
+        user = auth_service.get_user_by_session(session_token.strip())
+        
+        success = auth_service.logout_user(session_token.strip())
         if success:
+            # Trace user logout if we have user info
+            if user:
+                langfuse_service.trace_user_action(
+                    user_id=user.email,  # Use email as user_id for Langfuse
+                    action="user_logout",
+                    details={
+                        "email": user.email,
+                        "user_id": user.id,
+                        "logout_time": datetime.now().isoformat()
+                    }
+                )
+            
+            logger.info(f"User logged out successfully")
             return {"success": True, "message": "Logged out successfully"}
         else:
             raise HTTPException(status_code=400, detail="Invalid session token")
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in user logout: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -261,12 +341,19 @@ async def logout_user(session_token: str):
 async def get_current_user(session_token: str):
     """Get current user information from session"""
     try:
-        user = auth_service.get_user_by_session(session_token)
+        # Validate session token
+        if not session_token or not session_token.strip():
+            raise HTTPException(status_code=400, detail="Session token is required")
+        
+        user = auth_service.get_user_by_session(session_token.strip())
         if user:
             return {"success": True, "user": user.model_dump()}
         else:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting current user: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -275,6 +362,19 @@ async def get_current_user(session_token: str):
 async def create_tool(tool: ToolDefinition):
     """Create a new tool"""
     try:
+        # Validate required fields
+        if not tool.name or not tool.name.strip():
+            raise HTTPException(status_code=400, detail="Tool name is required")
+        
+        if not tool.description or not tool.description.strip():
+            raise HTTPException(status_code=400, detail="Tool description is required")
+        
+        # Check if tool with same name already exists
+        existing_tools = db_manager.get_all_tools()
+        for existing_tool in existing_tools:
+            if existing_tool.get('name', '').lower() == tool.name.lower():
+                raise HTTPException(status_code=400, detail=f"Tool with name '{tool.name}' already exists")
+        
         tool.id = tool.id or str(uuid.uuid4())
         
         # Try to register tool in ADK service (optional for function tools)
@@ -285,14 +385,20 @@ async def create_tool(tool: ToolDefinition):
         if db_manager.save_tool(tool_data):
             # Return success even if ADK registration failed
             if not adk_registration_success:
-                print(f"Warning: Tool {tool.name} saved to database but ADK registration failed")
+                logger.warning(f"Tool {tool.name} saved to database but ADK registration failed")
+            else:
+                logger.info(f"Created tool: {tool.name} (ID: {tool.id})")
             return {"success": True, "tool": tool_data}
         else:
             raise HTTPException(status_code=500, detail="Failed to save tool to database")
             
     except ValidationError as e:
+        logger.error(f"Validation error creating tool: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error creating tool: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -318,11 +424,18 @@ async def list_tools():
 async def get_tool(tool_id: str):
     """Get a specific tool"""
     try:
-        tool = db_manager.get_tool(tool_id)
+        # Validate tool_id
+        if not tool_id or not tool_id.strip():
+            raise HTTPException(status_code=400, detail="Tool ID cannot be empty")
+        
+        tool = db_manager.get_tool(tool_id.strip())
         if not tool:
             raise HTTPException(status_code=404, detail="Tool not found")
         return tool
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting tool {tool_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -330,12 +443,31 @@ async def get_tool(tool_id: str):
 async def update_tool(tool_id: str, tool: ToolDefinition):
     """Update an existing tool"""
     try:
+        # Validate tool_id
+        if not tool_id or not tool_id.strip():
+            raise HTTPException(status_code=400, detail="Tool ID cannot be empty")
+        
         # Check if tool exists
-        existing_tool = db_manager.get_tool(tool_id)
+        existing_tool = db_manager.get_tool(tool_id.strip())
         if not existing_tool:
             raise HTTPException(status_code=404, detail="Tool not found")
         
-        tool.id = tool_id
+        # Validate required fields
+        if not tool.name or not tool.name.strip():
+            raise HTTPException(status_code=400, detail="Tool name is required")
+        
+        if not tool.description or not tool.description.strip():
+            raise HTTPException(status_code=400, detail="Tool description is required")
+        
+        # Check if another tool with same name already exists (excluding current tool)
+        existing_tools = db_manager.get_all_tools()
+        for existing in existing_tools:
+            if (existing.get('id') != tool_id and 
+                existing.get('name', '').lower() == tool.name.lower()):
+                raise HTTPException(status_code=400, detail=f"Tool with name '{tool.name}' already exists")
+        
+        tool.id = tool_id.strip()
+        tool.updated_at = datetime.now().isoformat()
         
         # Try to re-register tool in ADK service (optional for function tools)
         adk_registration_success = adk_service.register_tool(tool)
@@ -345,14 +477,20 @@ async def update_tool(tool_id: str, tool: ToolDefinition):
         if db_manager.save_tool(tool_data):
             # Return success even if ADK registration failed
             if not adk_registration_success:
-                print(f"Warning: Tool {tool.name} updated in database but ADK registration failed")
+                logger.warning(f"Tool {tool.name} updated in database but ADK registration failed")
+            else:
+                logger.info(f"Updated tool: {tool.name} (ID: {tool_id})")
             return {"success": True, "tool": tool_data}
         else:
             raise HTTPException(status_code=500, detail="Failed to update tool in database")
             
     except ValidationError as e:
+        logger.error(f"Validation error updating tool: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error updating tool: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -360,11 +498,24 @@ async def update_tool(tool_id: str, tool: ToolDefinition):
 async def delete_tool(tool_id: str):
     """Delete a tool"""
     try:
-        if db_manager.delete_tool(tool_id):
+        # Validate tool_id
+        if not tool_id or not tool_id.strip():
+            raise HTTPException(status_code=400, detail="Tool ID cannot be empty")
+        
+        # Check if tool exists before deleting
+        existing_tool = db_manager.get_tool(tool_id.strip())
+        if not existing_tool:
+            raise HTTPException(status_code=404, detail="Tool not found")
+        
+        if db_manager.delete_tool(tool_id.strip()):
+            logger.info(f"Deleted tool: {existing_tool.get('name', 'Unknown')} (ID: {tool_id})")
             return {"success": True, "message": "Tool deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete tool")
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error deleting tool {tool_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -373,6 +524,19 @@ async def delete_tool(tool_id: str):
 async def create_agent(agent_request: AgentCreateRequest):
     """Create a new agent with sub-agent support"""
     try:
+        # Validate required fields
+        if not agent_request.name or not agent_request.name.strip():
+            raise HTTPException(status_code=400, detail="Agent name is required")
+        
+        if not agent_request.description or not agent_request.description.strip():
+            raise HTTPException(status_code=400, detail="Agent description is required")
+        
+        # Check if agent with same name already exists
+        existing_agents = db_manager.get_all_agents()
+        for existing_agent in existing_agents:
+            if existing_agent.get('name', '').lower() == agent_request.name.lower():
+                raise HTTPException(status_code=400, detail=f"Agent with name '{agent_request.name}' already exists")
+        
         agent_id = agent_request.id or str(uuid.uuid4())
         created_at = datetime.now().isoformat()
         updated_at = datetime.now().isoformat()
@@ -416,8 +580,8 @@ async def create_agent(agent_request: AgentCreateRequest):
         # Create the main agent configuration
         agent = AgentConfiguration(
             id=agent_id,
-            name=agent_request.name,
-            description=agent_request.description,
+            name=agent_request.name.strip(),
+            description=agent_request.description.strip(),
             agent_type=agent_request.agent_type,
             system_prompt=agent_request.system_prompt,
             instructions=agent_request.instructions,
@@ -438,6 +602,7 @@ async def create_agent(agent_request: AgentCreateRequest):
             # Save to database
             agent_data = agent.model_dump()
             if db_manager.save_agent(agent_data):
+                logger.info(f"Created agent: {agent_request.name} (ID: {agent_id})")
                 return {"success": True, "agent": agent_data}
             else:
                 raise HTTPException(status_code=500, detail="Failed to save agent to database")
@@ -445,8 +610,12 @@ async def create_agent(agent_request: AgentCreateRequest):
             raise HTTPException(status_code=400, detail="Failed to register agent in ADK service")
             
     except ValidationError as e:
+        logger.error(f"Validation error creating agent: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error creating agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -487,6 +656,7 @@ async def get_agents_for_sub_agents():
         
         return {"agents": available_agents}
     except Exception as e:
+        logger.error(f"Error getting agents for sub-agents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -512,16 +682,34 @@ async def get_agent(agent_id: str):
 async def update_agent(agent_id: str, agent_update: AgentUpdateRequest):
     """Update an agent"""
     try:
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
         # Check if agent exists
-        existing_agent = db_manager.get_agent(agent_id)
+        existing_agent = db_manager.get_agent(agent_id.strip())
         if not existing_agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
+        # Validate required fields
+        if not agent_update.name or not agent_update.name.strip():
+            raise HTTPException(status_code=400, detail="Agent name is required")
+        
+        if not agent_update.description or not agent_update.description.strip():
+            raise HTTPException(status_code=400, detail="Agent description is required")
+        
+        # Check if another agent with same name already exists (excluding current agent)
+        existing_agents = db_manager.get_all_agents()
+        for existing in existing_agents:
+            if (existing.get('id') != agent_id and 
+                existing.get('name', '').lower() == agent_update.name.lower()):
+                raise HTTPException(status_code=400, detail=f"Agent with name '{agent_update.name}' already exists")
+        
         # Update fields from the request
         updated_agent = AgentConfiguration(
-            id=agent_id,
-            name=agent_update.name,
-            description=agent_update.description,
+            id=agent_id.strip(),
+            name=agent_update.name.strip(),
+            description=agent_update.description.strip(),
             agent_type=agent_update.agent_type,
             system_prompt=agent_update.system_prompt,
             instructions=agent_update.instructions,
@@ -543,6 +731,7 @@ async def update_agent(agent_id: str, agent_update: AgentUpdateRequest):
                 # Update in database
                 agent_data = updated_agent.model_dump()
                 if db_manager.save_agent(agent_data):
+                    logger.info(f"Updated agent: {agent_update.name} (ID: {agent_id})")
                     return {"success": True, "agent": agent_data}
                 else:
                     raise HTTPException(status_code=500, detail="Failed to update agent in database")
@@ -552,15 +741,18 @@ async def update_agent(agent_id: str, agent_update: AgentUpdateRequest):
             # If ADK is not available, just update the database
             agent_data = updated_agent.model_dump()
             if db_manager.save_agent(agent_data):
+                logger.info(f"Updated agent: {agent_update.name} (ID: {agent_id}) - ADK not available")
                 return {"success": True, "agent": agent_data, "warning": "ADK not available, agent updated in database only"}
             else:
                 raise HTTPException(status_code=500, detail="Failed to update agent in database")
                 
     except ValidationError as e:
-        print(f"Validation error: {e}")
+        logger.error(f"Validation error updating agent: {e}")
         raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.error(f"Error updating agent: {e}")
         raise HTTPException(status_code=500, detail=f"Error updating agent: {str(e)}")
 
 
@@ -568,11 +760,24 @@ async def update_agent(agent_id: str, agent_update: AgentUpdateRequest):
 async def delete_agent(agent_id: str):
     """Delete an agent"""
     try:
-        if db_manager.delete_agent(agent_id):
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        # Check if agent exists before deleting
+        existing_agent = db_manager.get_agent(agent_id.strip())
+        if not existing_agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        if db_manager.delete_agent(agent_id.strip()):
+            logger.info(f"Deleted agent: {existing_agent.get('name', 'Unknown')} (ID: {agent_id})")
             return {"success": True, "message": "Agent deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete agent")
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error deleting agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -594,28 +799,36 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
+        # Check if agent is enabled
+        if not agent.get('is_enabled', True):
+            raise HTTPException(status_code=400, detail="Agent is disabled")
+        
         # Validate and extract message
         prompt = request.get("message", "")
         if not prompt or not prompt.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
         
-        session_id = request.get("session_id")
-        user_id = request.get("user_id", "anonymous")
+        # Limit message length
+        if len(prompt) > 2000:
+            raise HTTPException(status_code=400, detail="Message too long (max 2000 characters)")
         
-        # Validate user_id if provided
-        if user_id and not isinstance(user_id, str):
-            raise HTTPException(status_code=400, detail="user_id must be a string")
+        session_id = request.get("session_id")
+        user_email = request.get("user_email", "anonymous")  # Changed from user_id to user_email
+        
+        # Validate user_email if provided
+        if user_email and not isinstance(user_email, str):
+            raise HTTPException(status_code=400, detail="user_email must be a string")
         
         if not session_id:
             session_id = str(uuid.uuid4())
         
         # Execute agent
-        result = await adk_service.execute_agent(agent_id, prompt, session_id)
+        result = await adk_service.execute_agent(agent_id.strip(), prompt.strip(), session_id)
         
-        # Trace agent execution with Langfuse
+        # Trace agent execution with Langfuse using email as user_id
         if langfuse_service.is_langfuse_available():
             trace_id = langfuse_service.trace_agent_execution(
-                user_id=user_id,
+                user_id=user_email,  # Use email as user_id for Langfuse
                 agent_id=agent_id,
                 agent_name=agent.get("name", "Unknown Agent"),
                 user_prompt=prompt,
@@ -625,7 +838,8 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
                 metadata={
                     "agent_type": agent.get("agent_type", "unknown"),
                     "model": agent.get("model_settings", {}).get("model") if agent.get("model_settings") else "unknown",
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "user_email": user_email  # Add email to metadata for additional context
                 }
             )
             
@@ -639,10 +853,12 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
         session_data = {
             "id": session_id,
             "agent_id": agent_id,
-            "user_id": user_id,
+            "user_id": user_email,  # Use email as user_id
             "messages": [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.response}]
         }
         db_manager.save_chat_session(session_data)
+        
+        logger.info(f"Chat with agent {agent_id}: {len(prompt)} chars, success: {result.success}, user: {user_email}")
         
         return {
             "success": result.success,
@@ -652,43 +868,199 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
             "execution_time": result.execution_time,
             "metadata": result.metadata
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error in chat with agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/chat/sessions/{session_id}")
 async def get_chat_session(session_id: str):
     """Get chat session messages"""
-    messages = adk_service.get_session_messages(session_id)
-    return {"session_id": session_id, "messages": messages}
+    try:
+        # Validate session_id
+        if not session_id or not session_id.strip():
+            raise HTTPException(status_code=400, detail="Session ID cannot be empty")
+        
+        messages = adk_service.get_session_messages(session_id.strip())
+        return {"session_id": session_id.strip(), "messages": messages}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting chat session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/chat/sessions/{session_id}")
 async def clear_chat_session(session_id: str):
     """Clear a chat session"""
-    success = adk_service.clear_session(session_id)
-    return {"success": success}
+    try:
+        # Validate session_id
+        if not session_id or not session_id.strip():
+            raise HTTPException(status_code=400, detail="Session ID cannot be empty")
+        
+        success = adk_service.clear_session(session_id.strip())
+        if success:
+            logger.info(f"Cleared chat session: {session_id}")
+        return {"success": success}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error clearing chat session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Project Management Endpoints
 @app.post("/api/projects")
-async def create_project(project: ProjectConfiguration):
+async def create_project(project_data: dict):
     """Create a new project"""
     try:
-        project.id = project.id or str(uuid.uuid4())
-        project.created_at = datetime.now().isoformat()
-        project.updated_at = datetime.now().isoformat()
+        # Validate required fields
+        if not project_data.get('name') or not project_data['name'].strip():
+            raise HTTPException(status_code=400, detail="Project name is required")
+        
+        if not project_data.get('description') or not project_data['description'].strip():
+            raise HTTPException(status_code=400, detail="Project description is required")
+        
+        # Check if project with same name already exists
+        existing_projects = db_manager.get_all_projects()
+        for existing_project in existing_projects:
+            if existing_project.get('name', '').lower() == project_data['name'].lower():
+                raise HTTPException(status_code=400, detail=f"Project with name '{project_data['name']}' already exists")
+        
+        # Create project configuration
+        project = ProjectConfiguration(
+            id=str(uuid.uuid4()),
+            name=project_data['name'].strip(),
+            description=project_data['description'].strip(),
+            agents=project_data.get('agents', []),
+            tools=project_data.get('tools', []),
+            settings=project_data.get('settings', {}),
+            version=project_data.get('version', '1.0.0'),
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat()
+        )
         
         # Save to database
-        project_data = project.model_dump()
-        if db_manager.save_project(project_data):
-            return {"success": True, "project": project_data}
+        project_data_to_save = project.model_dump()
+        if db_manager.save_project(project_data_to_save):
+            logger.info(f"Created project: {project.name} (ID: {project.id})")
+            return {"success": True, "project": project_data_to_save}
         else:
             raise HTTPException(status_code=500, detail="Failed to save project to database")
         
     except ValidationError as e:
+        logger.error(f"Validation error creating project: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error creating project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/projects/{project_id}/agents")
+async def add_agent_to_project(project_id: str, request: dict):
+    """Add an agent to a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
+        agent_id = request.get('agent_id')
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID is required")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if agent exists
+        agent = db_manager.get_agent(agent_id.strip())
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Initialize agents list if it doesn't exist
+        if 'agents' not in project:
+            project['agents'] = []
+        
+        # Check if agent is already in the project
+        if agent_id.strip() in project['agents']:
+            raise HTTPException(status_code=400, detail="Agent is already in this project")
+        
+        # Add agent to project
+        project['agents'].append(agent_id.strip())
+        project['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated project
+        if db_manager.save_project(project):
+            logger.info(f"Added agent {agent_id} to project {project_id}")
+            return {"success": True, "message": f"Agent '{agent['name']}' added to project"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding agent to project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/projects/{project_id}/tools")
+async def add_tool_to_project(project_id: str, request: dict):
+    """Add a tool to a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
+        tool_id = request.get('tool_id')
+        if not tool_id or not tool_id.strip():
+            raise HTTPException(status_code=400, detail="Tool ID is required")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if tool exists
+        tool = db_manager.get_tool(tool_id.strip())
+        if not tool:
+            raise HTTPException(status_code=404, detail="Tool not found")
+        
+        # Initialize tools list if it doesn't exist
+        if 'tools' not in project:
+            project['tools'] = []
+        
+        # Check if tool is already in the project
+        if tool_id.strip() in project['tools']:
+            raise HTTPException(status_code=400, detail="Tool is already in this project")
+        
+        # Add tool to project
+        project['tools'].append(tool_id.strip())
+        project['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated project
+        if db_manager.save_project(project):
+            logger.info(f"Added tool {tool_id} to project {project_id}")
+            return {"success": True, "message": f"Tool '{tool['name']}' added to project"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding tool to project: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -706,11 +1078,18 @@ async def list_projects():
 async def get_project(project_id: str):
     """Get a specific project"""
     try:
-        project = db_manager.get_project(project_id)
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        project = db_manager.get_project(project_id.strip())
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         return project
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -718,43 +1097,448 @@ async def get_project(project_id: str):
 async def update_project(project_id: str, project: ProjectConfiguration):
     """Update a project"""
     try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
         # Check if project exists
-        existing_project = db_manager.get_project(project_id)
+        existing_project = db_manager.get_project(project_id.strip())
         if not existing_project:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        project.id = project_id
+        # Validate required fields
+        if not project.name or not project.name.strip():
+            raise HTTPException(status_code=400, detail="Project name is required")
+        
+        if not project.description or not project.description.strip():
+            raise HTTPException(status_code=400, detail="Project description is required")
+        
+        # Check if another project with same name already exists (excluding current project)
+        existing_projects = db_manager.get_all_projects()
+        for existing in existing_projects:
+            if (existing.get('id') != project_id and 
+                existing.get('name', '').lower() == project.name.lower()):
+                raise HTTPException(status_code=400, detail=f"Project with name '{project.name}' already exists")
+        
+        project.id = project_id.strip()
         project.updated_at = datetime.now().isoformat()
         
         # Save to database
         project_data = project.model_dump()
         if db_manager.save_project(project_data):
+            logger.info(f"Updated project: {project.name} (ID: {project_id})")
             return {"success": True, "project": project_data}
         else:
             raise HTTPException(status_code=500, detail="Failed to update project in database")
             
     except ValidationError as e:
+        logger.error(f"Validation error updating project: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error updating project: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/projects/{project_id}")
+async def partial_update_project(project_id: str, updates: dict):
+    """Partially update a project (for editing specific fields)"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        existing_project = db_manager.get_project(project_id.strip())
+        if not existing_project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Validate request
+        if not isinstance(updates, dict):
+            raise HTTPException(status_code=400, detail="Updates must be a JSON object")
+        
+        # Only allow specific fields to be updated
+        allowed_fields = {'name', 'description', 'version', 'settings'}
+        invalid_fields = set(updates.keys()) - allowed_fields
+        if invalid_fields:
+            raise HTTPException(status_code=400, detail=f"Cannot update fields: {', '.join(invalid_fields)}")
+        
+        # Apply updates
+        updated_project = existing_project.copy()
+        for field, value in updates.items():
+            if field in allowed_fields:
+                if field == 'name' and value and not value.strip():
+                    raise HTTPException(status_code=400, detail="Project name cannot be empty")
+                if field == 'description' and value and not value.strip():
+                    raise HTTPException(status_code=400, detail="Project description cannot be empty")
+                
+                updated_project[field] = value.strip() if isinstance(value, str) else value
+        
+        # Update timestamp
+        updated_project['updated_at'] = datetime.now().isoformat()
+        
+        # Check for name conflicts if name is being updated
+        if 'name' in updates and updates['name']:
+            existing_projects = db_manager.get_all_projects()
+            for existing in existing_projects:
+                if (existing.get('id') != project_id and 
+                    existing.get('name', '').lower() == updates['name'].lower()):
+                    raise HTTPException(status_code=400, detail=f"Project with name '{updates['name']}' already exists")
+        
+        # Save updated project
+        if db_manager.save_project(updated_project):
+            logger.info(f"Partially updated project: {updated_project.get('name', 'Unknown')} (ID: {project_id})")
+            return {"success": True, "project": updated_project}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save updated project")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error partially updating project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update project: {str(e)}")
+
+
+@app.post("/api/projects/{project_id}/edit")
+async def edit_project(project_id: str, updates: dict):
+    """Edit a project with simplified interface"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        existing_project = db_manager.get_project(project_id.strip())
+        if not existing_project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Validate request
+        if not isinstance(updates, dict):
+            raise HTTPException(status_code=400, detail="Updates must be a JSON object")
+        
+        # Only allow specific fields to be updated
+        allowed_fields = {'name', 'description', 'version', 'settings'}
+        invalid_fields = set(updates.keys()) - allowed_fields
+        if invalid_fields:
+            raise HTTPException(status_code=400, detail=f"Cannot update fields: {', '.join(invalid_fields)}")
+        
+        # Apply updates
+        updated_project = existing_project.copy()
+        for field, value in updates.items():
+            if field in allowed_fields:
+                if field == 'name' and value and not value.strip():
+                    raise HTTPException(status_code=400, detail="Project name cannot be empty")
+                if field == 'description' and value and not value.strip():
+                    raise HTTPException(status_code=400, detail="Project description cannot be empty")
+                
+                updated_project[field] = value.strip() if isinstance(value, str) else value
+        
+        # Update timestamp
+        updated_project['updated_at'] = datetime.now().isoformat()
+        
+        # Check for name conflicts if name is being updated
+        if 'name' in updates and updates['name']:
+            existing_projects = db_manager.get_all_projects()
+            for existing in existing_projects:
+                if (existing.get('id') != project_id and 
+                    existing.get('name', '').lower() == updates['name'].lower()):
+                    raise HTTPException(status_code=400, detail=f"Project with name '{updates['name']}' already exists")
+        
+        # Save updated project
+        if db_manager.save_project(updated_project):
+            logger.info(f"Edited project: {updated_project.get('name', 'Unknown')} (ID: {project_id})")
+            return {"success": True, "project": updated_project, "message": "Project updated successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save updated project")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error editing project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to edit project: {str(e)}")
+
+
+@app.post("/api/projects/{project_id}/agents/add")
+async def add_agent_to_project(project_id: str, agent_data: dict):
+    """Add an agent to a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Validate agent data
+        if not isinstance(agent_data, dict):
+            raise HTTPException(status_code=400, detail="Agent data must be a JSON object")
+        
+        agent_id = agent_data.get('agent_id')
+        if not agent_id:
+            raise HTTPException(status_code=400, detail="Agent ID is required")
+        
+        # Check if agent exists
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=400, detail="Agent not found")
+        
+        # Check if agent is already in project
+        if 'agents' not in project:
+            project['agents'] = []
+        
+        if agent_id in [a.get('id') for a in project['agents']]:
+            raise HTTPException(status_code=400, detail="Agent is already in this project")
+        
+        # Add agent to project
+        project['agents'].append({
+            'id': agent_id,
+            'name': agent.get('name', 'Unknown Agent'),
+            'added_at': datetime.now().isoformat()
+        })
+        
+        # Update project timestamp
+        project['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated project
+        if db_manager.save_project(project):
+            logger.info(f"Added agent {agent_id} to project {project_id}")
+            return {"success": True, "message": "Agent added to project successfully", "project": project}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding agent to project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add agent to project: {str(e)}")
+
+
+@app.delete("/api/projects/{project_id}/agents/{agent_id}")
+async def remove_agent_from_project(project_id: str, agent_id: str):
+    """Remove an agent from a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Check if agent is in project
+        if 'agents' not in project or not project['agents']:
+            raise HTTPException(status_code=400, detail="No agents in this project")
+        
+        # Find and remove agent
+        original_count = len(project['agents'])
+        project['agents'] = [a for a in project['agents'] if a.get('id') != agent_id]
+        
+        if len(project['agents']) == original_count:
+            raise HTTPException(status_code=400, detail="Agent not found in this project")
+        
+        # Update project timestamp
+        project['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated project
+        if db_manager.save_project(project):
+            logger.info(f"Removed agent {agent_id} from project {project_id}")
+            return {"success": True, "message": "Agent removed from project successfully", "project": project}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing agent from project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to remove agent from project: {str(e)}")
+
+
+@app.post("/api/projects/{project_id}/tools/add")
+async def add_tool_to_project(project_id: str, tool_data: dict):
+    """Add a tool to a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Validate tool data
+        if not isinstance(tool_data, dict):
+            raise HTTPException(status_code=400, detail="Tool data must be a JSON object")
+        
+        tool_id = tool_data.get('tool_id')
+        if not tool_id:
+            raise HTTPException(status_code=400, detail="Tool ID is required")
+        
+        # Check if tool exists
+        tool = db_manager.get_tool(tool_id)
+        if not tool:
+            raise HTTPException(status_code=400, detail="Tool not found")
+        
+        # Check if tool is already in project
+        if 'tools' not in project:
+            project['tools'] = []
+        
+        if tool_id in [t.get('id') for t in project['tools']]:
+            raise HTTPException(status_code=400, detail="Tool is already in this project")
+        
+        # Add tool to project
+        project['tools'].append({
+            'id': tool_id,
+            'name': tool.get('name', 'Unknown Tool'),
+            'added_at': datetime.now().isoformat()
+        })
+        
+        # Update project timestamp
+        project['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated project
+        if db_manager.save_project(project):
+            logger.info(f"Added tool {tool_id} to project {project_id}")
+            return {"success": True, "message": "Tool added to project successfully", "project": project}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding tool to project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add tool to project: {str(e)}")
+
+
+@app.delete("/api/projects/{project_id}/tools/{tool_id}")
+async def remove_tool_from_project(project_id: str, tool_id: str):
+    """Remove a tool from a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Check if tool is in project
+        if 'tools' not in project or not project['tools']:
+            raise HTTPException(status_code=400, detail="No tools in this project")
+        
+        # Find and remove tool
+        original_count = len(project['tools'])
+        project['tools'] = [t for t in project['tools'] if t.get('id') != tool_id]
+        
+        if len(project['tools']) == original_count:
+            raise HTTPException(status_code=400, detail="Tool not found in this project")
+        
+        # Update project timestamp
+        project['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated project
+        if db_manager.save_project(project):
+            logger.info(f"Removed tool {tool_id} from project {project_id}")
+            return {"success": True, "message": "Tool removed from project successfully", "project": project}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save project")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing tool from project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to remove tool from project: {str(e)}")
+
+
+@app.get("/api/projects/{project_id}/agents")
+async def get_project_agents(project_id: str):
+    """Get all agents in a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Get agent details
+        project_agents = []
+        if 'agents' in project and project['agents']:
+            for agent_ref in project['agents']:
+                agent = db_manager.get_agent(agent_ref.get('id'))
+                if agent:
+                    project_agents.append(agent)
+        
+        return {"success": True, "agents": project_agents}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting project agents {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get project agents: {str(e)}")
+
+
+@app.get("/api/projects/{project_id}/tools")
+async def get_project_tools(project_id: str):
+    """Get all tools in a project"""
+    try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        # Check if project exists
+        project = db_manager.get_project(project_id.strip())
+        if not project:
+            raise HTTPException(status_code=400, detail="Project not found")
+        
+        # Get tool details
+        project_tools = []
+        if 'tools' in project and project['tools']:
+            for tool_ref in project['tools']:
+                tool = db_manager.get_tool(tool_ref.get('id'))
+                if tool:
+                    project_tools.append(tool)
+        
+        return {"success": True, "tools": project_tools}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting project tools {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get project tools: {str(e)}")
 
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
     """Delete a project"""
     try:
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
         # Check if project exists
-        existing_project = db_manager.get_project(project_id)
+        existing_project = db_manager.get_project(project_id.strip())
         if not existing_project:
             raise HTTPException(status_code=404, detail="Project not found")
         
         # Actually delete the project from the database
-        if db_manager.delete_project(project_id):
+        if db_manager.delete_project(project_id.strip()):
+            logger.info(f"Deleted project: {existing_project.get('name', 'Unknown')} (ID: {project_id})")
             return {"success": True, "message": "Project deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete project")
             
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error deleting project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -762,7 +1546,11 @@ async def delete_project(project_id: str):
 async def export_project(project_id: str):
     """Export project as a complete package"""
     try:
-        project = db_manager.get_project(project_id)
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        project = db_manager.get_project(project_id.strip())
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
@@ -787,6 +1575,8 @@ async def export_project(project_id: str):
                 if tool:
                     export_data["tools"].append(tool)
         
+        logger.info(f"Exported project: {project.get('name', 'Unknown')} (ID: {project_id})")
+        
         return {
             "success": True,
             "message": f"Project '{project['name']}' exported successfully",
@@ -794,7 +1584,10 @@ async def export_project(project_id: str):
             "download_url": f"/api/projects/{project_id}/download"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error exporting project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to export project: {str(e)}")
 
 
@@ -802,7 +1595,11 @@ async def export_project(project_id: str):
 async def download_project(project_id: str):
     """Download project as a ZIP file"""
     try:
-        project = db_manager.get_project(project_id)
+        # Validate project_id
+        if not project_id or not project_id.strip():
+            raise HTTPException(status_code=400, detail="Project ID cannot be empty")
+        
+        project = db_manager.get_project(project_id.strip())
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
@@ -946,13 +1743,18 @@ This project was generated using the Google ADK No-Code Platform.
             import os
             os.unlink(tmp_file.name)
             
+            logger.info(f"Downloaded project: {project.get('name', 'Unknown')} (ID: {project_id})")
+            
             return JSONResponse(
                 content=zip_content,
                 media_type="application/zip",
                 headers={"Content-Disposition": f"attachment; filename={project['name']}.zip"}
             )
             
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error downloading project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to download project: {str(e)}")
 
 
@@ -961,14 +1763,21 @@ This project was generated using the Google ADK No-Code Platform.
 async def get_agent_sub_agents(agent_id: str):
     """Get sub-agents for a specific agent"""
     try:
-        agent = db_manager.get_agent(agent_id)
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        agent = db_manager.get_agent(agent_id.strip())
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
         sub_agents = agent.get('sub_agents', [])
         return {"sub_agents": sub_agents}
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting sub-agents for agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -976,7 +1785,15 @@ async def get_agent_sub_agents(agent_id: str):
 async def add_sub_agent_to_agent(agent_id: str, sub_agent: SubAgent):
     """Add a sub-agent to an existing agent"""
     try:
-        agent = db_manager.get_agent(agent_id)
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        # Validate sub-agent
+        if not sub_agent.name or not sub_agent.name.strip():
+            raise HTTPException(status_code=400, detail="Sub-agent name is required")
+        
+        agent = db_manager.get_agent(agent_id.strip())
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
@@ -990,7 +1807,7 @@ async def add_sub_agent_to_agent(agent_id: str, sub_agent: SubAgent):
         
         # Check if sub-agent with same name already exists
         existing_names = [sa.get('name') for sa in agent['sub_agents']]
-        if sub_agent.name in existing_names:
+        if sub_agent.name.strip() in existing_names:
             raise HTTPException(status_code=400, detail=f"Sub-agent with name '{sub_agent.name}' already exists")
         
         # Add the new sub-agent
@@ -999,75 +1816,51 @@ async def add_sub_agent_to_agent(agent_id: str, sub_agent: SubAgent):
         
         # Save updated agent
         if db_manager.save_agent(agent):
+            logger.info(f"Added sub-agent '{sub_agent.name}' to agent {agent_id}")
             return {"success": True, "message": f"Sub-agent '{sub_agent.name}' added successfully", "sub_agent": sub_agent.model_dump()}
         else:
             raise HTTPException(status_code=500, detail="Failed to save agent with new sub-agent")
             
     except ValidationError as e:
+        logger.error(f"Validation error adding sub-agent: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error adding sub-agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/agents/available-for-sub")
-async def get_agents_available_for_sub():
-    """Get all agents that can be used as sub-agents"""
-    try:
-        # Try to get agents with basic error handling
-        try:
-            agents = db_manager.get_all_agents()
-            logger.info(f"Retrieved {len(agents) if agents else 0} agents from database")
-        except Exception as db_error:
-            logger.error(f"Database error in get_all_agents: {db_error}")
-            return {"available_agents": [], "error": "Database error"}
-        
-        if not agents:
-            logger.info("No agents found in database")
-            return {"available_agents": []}
-        
-        # Simple approach - just return all agents without complex filtering for now
-        available_agents = []
-        for agent in agents:
-            try:
-                # Basic agent info extraction with error handling
-                agent_info = {
-                    "id": agent.get('id', 'unknown'),
-                    "name": agent.get('name', 'Unknown'),
-                    "description": agent.get('description', ''),
-                    "agent_type": agent.get('agent_type', 'basic'),
-                    "tools": agent.get('tools', []) if isinstance(agent.get('tools'), list) else []
-                }
-                available_agents.append(agent_info)
-            except Exception as agent_error:
-                logger.warning(f"Failed to process agent: {agent_error}")
-                continue
-        
-        logger.info(f"Returning {len(available_agents)} available agents")
-        return {"available_agents": available_agents}
-        
-    except Exception as e:
-        logger.error(f"Unexpected error in get_agents_available_for_sub: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        # Return a basic error response instead of raising HTTPException
-        return {"available_agents": [], "error": str(e)}
+
 
 
 @app.post("/api/agents/{agent_id}/sub-agents/from-existing")
 async def add_existing_agent_as_sub(agent_id: str, request: dict):
     """Add an existing agent as a sub-agent to another agent"""
     try:
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         source_agent_id = request.get('source_agent_id')
-        if not source_agent_id:
+        if not source_agent_id or not source_agent_id.strip():
             raise HTTPException(status_code=400, detail="source_agent_id is required")
         
+        # Prevent self-referencing
+        if agent_id.strip() == source_agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent cannot be its own sub-agent")
+        
         # Get the target agent (the one that will receive the sub-agent)
-        target_agent = db_manager.get_agent(agent_id)
+        target_agent = db_manager.get_agent(agent_id.strip())
         if not target_agent:
             raise HTTPException(status_code=404, detail="Target agent not found")
         
         # Get the source agent (the one that will become a sub-agent)
-        source_agent = db_manager.get_agent(source_agent_id)
+        source_agent = db_manager.get_agent(source_agent_id.strip())
         if not source_agent:
             raise HTTPException(status_code=404, detail="Source agent not found")
         
@@ -1079,7 +1872,7 @@ async def add_existing_agent_as_sub(agent_id: str, request: dict):
         
         # Create sub-agent configuration from source agent
         sub_agent = SubAgent(
-            id=source_agent_id,
+            id=source_agent_id.strip(),
             name=source_agent['name'],
             agent_type=source_agent['agent_type'],
             system_prompt=source_agent.get('system_prompt', ''),
@@ -1098,6 +1891,7 @@ async def add_existing_agent_as_sub(agent_id: str, request: dict):
         
         # Save updated target agent
         if db_manager.save_agent(target_agent):
+            logger.info(f"Added existing agent '{source_agent['name']}' as sub-agent to '{target_agent['name']}'")
             return {
                 "success": True, 
                 "message": f"Agent '{source_agent['name']}' added as sub-agent to '{target_agent['name']}'",
@@ -1107,8 +1901,12 @@ async def add_existing_agent_as_sub(agent_id: str, request: dict):
             raise HTTPException(status_code=500, detail="Failed to save agent with new sub-agent")
             
     except ValidationError as e:
+        logger.error(f"Validation error adding existing agent as sub-agent: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error adding existing agent as sub-agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1116,7 +1914,15 @@ async def add_existing_agent_as_sub(agent_id: str, request: dict):
 async def remove_sub_agent(agent_id: str, sub_agent_id: str):
     """Remove a sub-agent from an agent"""
     try:
-        agent = db_manager.get_agent(agent_id)
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        # Validate sub_agent_id
+        if not sub_agent_id or not sub_agent_id.strip():
+            raise HTTPException(status_code=400, detail="Sub-agent ID cannot be empty")
+        
+        agent = db_manager.get_agent(agent_id.strip())
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
@@ -1126,9 +1932,10 @@ async def remove_sub_agent(agent_id: str, sub_agent_id: str):
         # Find and remove the sub-agent
         sub_agents = agent['sub_agents']
         sub_agent_found = False
+        removed_sub_agent = None
         
         for i, sub_agent in enumerate(sub_agents):
-            if sub_agent.get('id') == sub_agent_id:
+            if sub_agent.get('id') == sub_agent_id.strip():
                 removed_sub_agent = sub_agents.pop(i)
                 sub_agent_found = True
                 break
@@ -1141,6 +1948,7 @@ async def remove_sub_agent(agent_id: str, sub_agent_id: str):
         
         # Save updated agent
         if db_manager.save_agent(agent):
+            logger.info(f"Removed sub-agent '{removed_sub_agent.get('name')}' from agent {agent_id}")
             return {
                 "success": True, 
                 "message": f"Sub-agent '{removed_sub_agent.get('name')}' removed successfully"
@@ -1148,7 +1956,10 @@ async def remove_sub_agent(agent_id: str, sub_agent_id: str):
         else:
             raise HTTPException(status_code=500, detail="Failed to save agent after removing sub-agent")
             
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error removing sub-agent {sub_agent_id} from agent {agent_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1198,7 +2009,541 @@ if __name__ == "__main__":
         return {"code": code, "filename": f"{agent['name'].lower().replace(' ', '_')}.py"}
         
     except Exception as e:
+        logger.error(f"Error generating agent code: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate agent code: {str(e)}")
+
+
+# Agent Embedding Endpoints
+@app.post("/api/agents/{agent_id}/embed")
+async def create_agent_embed(agent_id: str):
+    """Create an embeddable version of an agent"""
+    try:
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        agent = db_manager.get_agent(agent_id.strip())
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if agent is enabled
+        if not agent.get('is_enabled', True):
+            raise HTTPException(status_code=400, detail="Cannot embed disabled agent")
+        
+        # Generate unique embed ID
+        embed_id = f"embed_{agent_id}_{uuid.uuid4().hex[:8]}"
+        
+        # Create embed configuration
+        embed_config = {
+            "embed_id": embed_id,
+            "agent_id": agent_id,
+            "agent_name": agent['name'],
+            "created_at": datetime.now().isoformat(),
+            "is_active": True,
+            "access_count": 0,
+            "last_accessed": None
+        }
+        
+        # Save embed configuration to database
+        if not db_manager.save_agent_embed(embed_config):
+            raise HTTPException(status_code=500, detail="Failed to save embed configuration")
+        
+        # Generate embed code
+        embed_code = generate_embed_html(agent, embed_id)
+        
+        logger.info(f"Created embed for agent {agent_id}: {embed_id}")
+        
+        return {
+            "success": True,
+            "embed_id": embed_id,
+            "embed_code": embed_code,
+            "embed_url": f"/api/embed/{embed_id}",
+            "message": "Agent embed created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating agent embed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create agent embed: {str(e)}")
+
+
+@app.get("/api/embed/{embed_id}")
+async def get_embedded_agent(embed_id: str):
+    """Get embedded agent interface"""
+    try:
+        # Validate embed_id
+        if not embed_id or not embed_id.strip():
+            raise HTTPException(status_code=400, detail="Embed ID cannot be empty")
+        
+        embed_config = db_manager.get_agent_embed(embed_id.strip())
+        if not embed_config:
+            raise HTTPException(status_code=404, detail="Embed not found")
+        
+        if not embed_config.get('is_active', False):
+            raise HTTPException(status_code=410, detail="Embed is no longer active")
+        
+        agent = db_manager.get_agent(embed_config['agent_id'])
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if agent is enabled
+        if not agent.get('is_enabled', True):
+            raise HTTPException(status_code=410, detail="Agent is disabled")
+        
+        # Update access statistics
+        db_manager.update_embed_access(embed_id.strip())
+        
+        # Return embedded agent HTML
+        return HTMLResponse(content=generate_embedded_agent_html(agent, embed_id.strip()))
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading embedded agent {embed_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load embedded agent: {str(e)}")
+
+
+@app.post("/api/embed/{embed_id}/chat")
+async def embedded_agent_chat(embed_id: str, request: dict):
+    """Handle chat requests from embedded agents"""
+    try:
+        # Validate embed_id
+        if not embed_id or not embed_id.strip():
+            raise HTTPException(status_code=400, detail="Embed ID cannot be empty")
+        
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
+        embed_config = db_manager.get_agent_embed(embed_id.strip())
+        if not embed_config:
+            raise HTTPException(status_code=404, detail="Embed not found")
+        
+        if not embed_config.get('is_active', False):
+            raise HTTPException(status_code=410, detail="Embed is no longer active")
+        
+        agent = db_manager.get_agent(embed_config['agent_id'])
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if agent is enabled
+        if not agent.get('is_enabled', True):
+            raise HTTPException(status_code=400, detail="Agent is disabled")
+        
+        message = request.get("message", "")
+        if not message or not message.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
+        # Limit message length
+        if len(message) > 1000:
+            raise HTTPException(status_code=400, detail="Message too long (max 1000 characters)")
+        
+        # Process message through agent
+        response = await adk_service.process_message(agent, message.strip())
+        
+        # Update access statistics
+        db_manager.update_embed_access(embed_id)
+        
+        logger.info(f"Processed chat for embed {embed_id}: {len(message)} chars")
+        
+        return {
+            "success": True,
+            "response": response,
+            "agent_name": agent['name'],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing embedded chat: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
+
+
+@app.get("/api/agents/{agent_id}/embeds")
+async def list_agent_embeds(agent_id: str):
+    """List all embeds for an agent"""
+    try:
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
+        
+        # Check if agent exists
+        agent = db_manager.get_agent(agent_id.strip())
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        embeds = db_manager.get_agent_embeds(agent_id.strip())
+        return {"embeds": embeds}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing embeds for agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list embeds: {str(e)}")
+
+
+@app.delete("/api/embed/{embed_id}")
+async def delete_agent_embed(embed_id: str):
+    """Delete an agent embed"""
+    try:
+        # Validate embed_id
+        if not embed_id or not embed_id.strip():
+            raise HTTPException(status_code=400, detail="Embed ID cannot be empty")
+        
+        # Check if embed exists before deleting
+        embed_config = db_manager.get_agent_embed(embed_id.strip())
+        if not embed_config:
+            raise HTTPException(status_code=404, detail="Embed not found")
+        
+        # Delete the embed
+        success = db_manager.delete_agent_embed(embed_id.strip())
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete embed from database")
+        
+        logger.info(f"Deleted embed: {embed_id}")
+        
+        return {
+            "success": True,
+            "message": "Embed deleted successfully",
+            "deleted_embed_id": embed_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting embed {embed_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete embed: {str(e)}")
+
+
+# Helper functions for agent embedding
+def generate_embed_html(agent: dict, embed_id: str) -> str:
+    """Generate HTML embed code for an agent"""
+    embed_url = f"/api/embed/{embed_id}"
+    
+    return f'''<!-- {agent['name']} Agent Embed Code -->
+ <!-- Copy this code to embed the agent on any website -->
+ <!-- IMPORTANT: Replace YOUR_DOMAIN with your actual ADK platform domain (e.g., https://yourdomain.com) -->
+ <div id="adk-agent-{embed_id}" style="width: 100%; max-width: 600px; margin: 0 auto;">
+     <iframe 
+         src="https://YOUR_DOMAIN{embed_url}" 
+         width="100%" 
+         height="600" 
+         frameborder="0" 
+         scrolling="no"
+         style="border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+     </iframe>
+ </div>
+ 
+ <!-- Alternative: Direct JavaScript integration with automatic domain detection -->
+ <script>
+ (function() {{
+     const container = document.getElementById('adk-agent-{embed_id}');
+     if (!container) return;
+     
+     // Configuration - Update this with your ADK platform domain
+     const ADK_DOMAIN = 'https://YOUR_DOMAIN'; // Replace with your actual domain
+     
+     // Create chat interface
+     const chatDiv = document.createElement('div');
+     chatDiv.innerHTML = `
+         <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; background: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+             <h3 style="margin: 0 0 15px 0; color: #374151; font-size: 18px;">{agent['name']}</h3>
+             <div id="chat-messages-{embed_id}" style="height: 300px; overflow-y: auto; margin-bottom: 15px; padding: 10px; background: #f9fafb; border-radius: 4px;"></div>
+             <div style="display: flex; gap: 10px;">
+                 <input type="text" id="chat-input-{embed_id}" placeholder="Type your message..." 
+                        style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                 <button onclick="sendMessage_{embed_id}()" 
+                         style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                     Send
+                 </button>
+             </div>
+         </div>
+     `;
+     
+     container.appendChild(chatDiv);
+     
+     // Add message handling
+     window.sendMessage_{embed_id} = async function() {{
+         const input = document.getElementById('chat-input-{embed_id}');
+         const messagesDiv = document.getElementById('chat-messages-{embed_id}');
+         const message = input.value.trim();
+         
+         if (!message) return;
+         
+         // Add user message
+         messagesDiv.innerHTML += `<div style="margin-bottom: 10px; text-align: right;"><span style="background: #3b82f6; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px;">${{message}}</span></div>`;
+         input.value = '';
+         
+         try {{
+             // Use the configured ADK domain
+             const response = await fetch(`${{ADK_DOMAIN}}{embed_url}/chat`, {{
+                 method: 'POST',
+                 headers: {{ 'Content-Type': 'application/json' }},
+                 body: JSON.stringify({{ message: message }})
+             }});
+             
+             const data = await response.json();
+             
+             if (data.success) {{
+                 messagesDiv.innerHTML += `<div style="margin-bottom: 10px;"><span style="background: #f3f4f6; color: #374151; padding: 5px 10px; border-radius: 15px; font-size: 12px;">${{data.response}}</span></div>`;
+             }} else {{
+                 messagesDiv.innerHTML += `<div style="margin-bottom: 10px;"><span style="background: #fef2f2; color: #dc2626; padding: 5px 10px; border-radius: 15px; font-size: 12px;">Error: ${{data.detail || 'Failed to get response'}}</span></div>`;
+             }}
+         }} catch (error) {{
+             messagesDiv.innerHTML += `<div style="margin-bottom: 10px;"><span style="background: #fef2f2; color: #dc2626; padding: 5px 10px; border-radius: 15px; font-size: 12px;">Error: ${{error.message}}</span></div>`;
+         }}
+         
+         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+     }};
+     
+     // Enter key support
+     document.getElementById('chat-input-{embed_id}').addEventListener('keypress', function(e) {{
+         if (e.key === 'Enter') {{
+             sendMessage_{embed_id}();
+         }}
+     }});
+ }})();
+ </script>'''
+
+
+
+
+def generate_embedded_agent_html(agent: dict, embed_id: str) -> str:
+    """Generate HTML for embedded agent interface"""
+    html_content = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{agent["name"]} - AI Agent</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f9fafb;
+        }}
+        .chat-container {{
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }}
+        .chat-header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }}
+        .chat-header h1 {{
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        .chat-header p {{
+            margin: 5px 0 0 0;
+            opacity: 0.9;
+            font-size: 14px;
+        }}
+        .chat-messages {{
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8fafc;
+        }}
+        .message {{
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }}
+        .message.user {{
+            flex-direction: row-reverse;
+        }}
+        .message-avatar {{
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+        }}
+        .message.user .message-avatar {{
+            background: #3b82f6;
+        }}
+        .message.agent .message-avatar {{
+            background: #10b981;
+        }}
+        .message-content {{
+            background: white;
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 70%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }}
+        .message.user .message-content {{
+            background: #3b82f6;
+            color: white;
+        }}
+        .message.agent .message-content {{
+            background: white;
+            color: #374151;
+        }}
+        .chat-input-container {{
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }}
+        .chat-input-wrapper {{
+            display: flex;
+            gap: 10px;
+        }}
+        .chat-input {{
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }}
+        .chat-input:focus {{
+            border-color: #3b82f6;
+        }}
+        .send-button {{
+            padding: 12px 24px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }}
+        .send-button:hover {{
+            background: #2563eb;
+        }}
+        .send-button:disabled {{
+            background: #9ca3af;
+            cursor: not-allowed;
+        }}
+        .welcome-message {{
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+            margin: 20px 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>{agent["name"]}</h1>
+            <p>{agent.get("description", "AI Assistant")}</p>
+        </div>
+        
+        <div class="chat-messages" id="chat-messages">
+            <div class="welcome-message">
+                👋 Hi! I'm {agent["name"]}. How can I help you today?
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <input type="text" class="chat-input" id="chat-input" placeholder="Type your message..." />
+                <button class="send-button" onclick="sendMessage()" id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const embedId = '{embed_id}';
+        const agentName = '{agent["name"]}';
+        
+        async function sendMessage() {{
+            const input = document.getElementById('chat-input');
+            const button = document.getElementById('send-button');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Disable input and button
+            input.disabled = true;
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            
+            // Add user message
+            addMessage(message, 'user');
+            input.value = '';
+            
+            try {{
+                // Get the current origin to construct the full API URL
+                const currentOrigin = window.location.origin;
+                const apiUrl = currentOrigin + '/api/embed/' + embedId + '/chat';
+                
+                const response = await fetch(apiUrl, {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ message: message }})
+                }});
+                
+                const data = await response.json();
+                
+                if (data.success) {{
+                    addMessage(data.response, 'agent');
+                }} else {{
+                    addMessage('Sorry, I encountered an error. Please try again.', 'agent');
+                }}
+            }} catch (error) {{
+                addMessage('Sorry, I\\'m having trouble connecting right now. Please try again later.', 'agent');
+            }}
+            
+            // Re-enable input and button
+            input.disabled = false;
+            button.disabled = false;
+            button.textContent = 'Send';
+            input.focus();
+        }}
+        
+        function addMessage(content, type) {{
+            const messagesDiv = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + type;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = type === 'user' ? 'U' : 'A';
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            messageContent.textContent = content;
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(messageContent);
+            messagesDiv.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }}
+        
+        // Enter key support
+        document.getElementById('chat-input').addEventListener('keypress', function(e) {{
+            if (e.key === 'Enter') {{
+                sendMessage();
+            }}
+        }});
+    </script>
+</body>
+</html>'''
+    
+    return html_content
 
 
 # AI Suggestion Endpoints
@@ -1206,10 +2551,24 @@ if __name__ == "__main__":
 async def suggest_agent_name(request: dict):
     """Get AI-powered suggestion for agent name"""
     try:
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         description = request.get("description", "")
-        suggestion = await adk_service.get_agent_name_suggestion(description)
+        if not description or not description.strip():
+            raise HTTPException(status_code=400, detail="Description is required")
+        
+        # Limit description length
+        if len(description) > 500:
+            raise HTTPException(status_code=400, detail="Description too long (max 500 characters)")
+        
+        suggestion = await adk_service.get_agent_name_suggestion(description.strip())
         return {"success": True, "suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting agent name suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1217,11 +2576,28 @@ async def suggest_agent_name(request: dict):
 async def suggest_agent_description(request: dict):
     """Get AI-powered suggestion for agent description"""
     try:
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         name = request.get("name", "")
+        if not name or not name.strip():
+            raise HTTPException(status_code=400, detail="Agent name is required")
+        
         agent_type = request.get("agent_type", "")
-        suggestion = await adk_service.get_agent_description_suggestion(name, agent_type)
+        if not agent_type or not agent_type.strip():
+            raise HTTPException(status_code=400, detail="Agent type is required")
+        
+        # Limit input lengths
+        if len(name) > 100:
+            raise HTTPException(status_code=400, detail="Agent name too long (max 100 characters)")
+        
+        suggestion = await adk_service.get_agent_description_suggestion(name.strip(), agent_type.strip())
         return {"success": True, "suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting agent description suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1229,12 +2605,35 @@ async def suggest_agent_description(request: dict):
 async def suggest_agent_system_prompt(request: dict):
     """Get AI-powered suggestion for agent system prompt"""
     try:
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         name = request.get("name", "")
+        if not name or not name.strip():
+            raise HTTPException(status_code=400, detail="Agent name is required")
+        
         description = request.get("description", "")
+        if not description or not description.strip():
+            raise HTTPException(status_code=400, detail="Agent description is required")
+        
         agent_type = request.get("agent_type", "")
-        suggestion = await adk_service.get_agent_system_prompt_suggestion(name, description, agent_type)
+        if not agent_type or not agent_type.strip():
+            raise HTTPException(status_code=400, detail="Agent type is required")
+        
+        # Limit input lengths
+        if len(name) > 100:
+            raise HTTPException(status_code=400, detail="Agent name too long (max 100 characters)")
+        
+        if len(description) > 500:
+            raise HTTPException(status_code=400, detail="Agent description too long (max 500 characters)")
+        
+        suggestion = await adk_service.get_agent_system_prompt_suggestion(name.strip(), description.strip(), agent_type.strip())
         return {"success": True, "suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting agent system prompt suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1242,11 +2641,28 @@ async def suggest_agent_system_prompt(request: dict):
 async def suggest_tool_name(request: dict):
     """Get AI-powered suggestion for tool name"""
     try:
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         description = request.get("description", "")
+        if not description or not description.strip():
+            raise HTTPException(status_code=400, detail="Tool description is required")
+        
         tool_type = request.get("tool_type", "")
-        suggestion = await adk_service.get_tool_name_suggestion(description, tool_type)
+        if not tool_type or not tool_type.strip():
+            raise HTTPException(status_code=400, detail="Tool type is required")
+        
+        # Limit input lengths
+        if len(description) > 500:
+            raise HTTPException(status_code=400, detail="Tool description too long (max 500 characters)")
+        
+        suggestion = await adk_service.get_tool_name_suggestion(description.strip(), tool_type.strip())
         return {"success": True, "suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting tool name suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1254,11 +2670,28 @@ async def suggest_tool_name(request: dict):
 async def suggest_tool_description(request: dict):
     """Get AI-powered suggestion for tool description"""
     try:
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         name = request.get("name", "")
+        if not name or not name.strip():
+            raise HTTPException(status_code=400, detail="Tool name is required")
+        
         tool_type = request.get("tool_type", "")
-        suggestion = await adk_service.get_tool_description_suggestion(name, tool_type)
+        if not tool_type or not tool_type.strip():
+            raise HTTPException(status_code=400, detail="Tool type is required")
+        
+        # Limit input lengths
+        if len(name) > 100:
+            raise HTTPException(status_code=400, detail="Tool name too long (max 100 characters)")
+        
+        suggestion = await adk_service.get_tool_description_suggestion(name.strip(), tool_type.strip())
         return {"success": True, "suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting tool description suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1266,12 +2699,35 @@ async def suggest_tool_description(request: dict):
 async def suggest_tool_code(request: dict):
     """Get AI-powered suggestion for tool function code"""
     try:
+        # Validate request
+        if not isinstance(request, dict):
+            raise HTTPException(status_code=400, detail="Request must be a JSON object")
+        
         name = request.get("name", "")
+        if not name or not name.strip():
+            raise HTTPException(status_code=400, detail="Tool name is required")
+        
         description = request.get("description", "")
+        if not description or not description.strip():
+            raise HTTPException(status_code=400, detail="Tool description is required")
+        
         tool_type = request.get("tool_type", "")
-        suggestion = await adk_service.get_tool_code_suggestion(name, description, tool_type)
+        if not tool_type or not tool_type.strip():
+            raise HTTPException(status_code=400, detail="Tool type is required")
+        
+        # Limit input lengths
+        if len(name) > 100:
+            raise HTTPException(status_code=400, detail="Tool name too long (max 100 characters)")
+        
+        if len(description) > 500:
+            raise HTTPException(status_code=400, detail="Tool description too long (max 500 characters)")
+        
+        suggestion = await adk_service.get_tool_code_suggestion(name.strip(), description.strip(), tool_type.strip())
         return {"success": True, "suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error getting tool code suggestion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1282,8 +2738,16 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
     await websocket.accept()
     
     try:
+        # Validate agent_id
+        if not agent_id or not agent_id.strip():
+            await websocket.send_text(json.dumps({
+                "error": "Invalid agent ID"
+            }))
+            await websocket.close()
+            return
+        
         # Check if agent exists in database
-        agent = db_manager.get_agent(agent_id)
+        agent = db_manager.get_agent(agent_id.strip())
         if not agent:
             await websocket.send_text(json.dumps({
                 "error": "Agent not found"
@@ -1291,41 +2755,80 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             await websocket.close()
             return
         
-        while True:
-            # Receive message from client
-            data = await websocket.receive_text()
-            message_data = json.loads(data)
-            
-            prompt = message_data.get("message", "")
-            session_id = message_data.get("session_id", str(uuid.uuid4()))
-            
-            # Execute agent
-            result = await adk_service.execute_agent(agent_id, prompt, session_id)
-            
-            # Save chat session to database
-            session_data = {
-                "id": session_id,
-                "agent_id": agent_id,
-                "user_id": message_data.get("user_id"),
-                "messages": [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.response}]
-            }
-            db_manager.save_chat_session(session_data)
-            
-            # Send response back to client
+        # Check if agent is enabled
+        if not agent.get('is_enabled', True):
             await websocket.send_text(json.dumps({
-                "success": result.success,
-                "response": result.response,
-                "error": result.error,
-                "session_id": session_id,
-                "execution_time": result.execution_time
+                "error": "Agent is disabled"
             }))
+            await websocket.close()
+            return
+        
+        logger.info(f"WebSocket chat started for agent {agent_id}")
+        
+        while True:
+            try:
+                # Receive message from client
+                data = await websocket.receive_text()
+                message_data = json.loads(data)
+                
+                prompt = message_data.get("message", "")
+                session_id = message_data.get("session_id", str(uuid.uuid4()))
+                
+                # Validate message
+                if not prompt or not prompt.strip():
+                    await websocket.send_text(json.dumps({
+                        "error": "Message cannot be empty"
+                    }))
+                    continue
+                
+                # Limit message length
+                if len(prompt) > 2000:
+                    await websocket.send_text(json.dumps({
+                        "error": "Message too long (max 2000 characters)"
+                    }))
+                    continue
+                
+                # Execute agent
+                result = await adk_service.execute_agent(agent_id.strip(), prompt.strip(), session_id)
+                
+                # Save chat session to database
+                session_data = {
+                    "id": session_id,
+                    "agent_id": agent_id,
+                    "user_id": message_data.get("user_id"),
+                    "messages": [{"role": "user", "content": prompt}, {"role": "assistant", "content": result.response}]
+                }
+                db_manager.save_chat_session(session_data)
+                
+                # Send response back to client
+                await websocket.send_text(json.dumps({
+                    "success": result.success,
+                    "response": result.response,
+                    "error": result.error,
+                    "session_id": session_id,
+                    "execution_time": result.execution_time
+                }))
+                
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "error": "Invalid JSON format"
+                }))
+            except Exception as msg_error:
+                logger.error(f"Error processing WebSocket message: {msg_error}")
+                await websocket.send_text(json.dumps({
+                    "error": "Internal server error"
+                }))
             
     except WebSocketDisconnect:
-        print("WebSocket disconnected")
+        logger.info(f"WebSocket disconnected for agent {agent_id}")
     except Exception as e:
-        await websocket.send_text(json.dumps({
-            "error": str(e)
-        }))
+        logger.error(f"WebSocket error for agent {agent_id}: {e}")
+        try:
+            await websocket.send_text(json.dumps({
+                "error": "Internal server error"
+            }))
+        except:
+            pass
         await websocket.close()
 
 

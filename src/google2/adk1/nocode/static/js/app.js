@@ -20,6 +20,7 @@ class AgentGeniePlatform {
         this.loadInitialData();
         this.checkADKStatus();
         this.showSection('dashboard'); // Show dashboard by default
+        this.bindEmbedEvents(); // Bind embed functionality
         console.log('Initialization complete');
     }
     
@@ -42,6 +43,9 @@ class AgentGeniePlatform {
         document.getElementById('dashboardCreateToolBtn')?.addEventListener('click', async () => {
             await this.showSection('tools');
             setTimeout(() => this.showModal('toolModal'), 100);
+        });
+        document.getElementById('dashboardStartChatBtn')?.addEventListener('click', async () => {
+            await this.showSection('chat');
         });
         
         // Create buttons
@@ -300,11 +304,16 @@ class AgentGeniePlatform {
             await this.loadTools();
             this.renderToolsGrid();
         } else if (sectionName === 'projects') {
+            // Reload projects data and then render
+            await this.loadProjects();
             this.renderProjectsGrid();
         } else if (sectionName === 'sub-agents') {
-            // Special handling for sub-agents section
-            await this.populateParentAgentSelect();
-            await this.populateExistingAgentSelect();
+            // Load sub-agents for the selected agent
+            this.populateParentAgentSelect();
+        } else if (sectionName === 'embeds') {
+            // Load embeds for the selected agent
+            this.populateEmbedAgentSelect();
+            this.loadAgentEmbeds();
         }
     }
     
@@ -515,26 +524,35 @@ class AgentGeniePlatform {
             
             const statusElement = document.getElementById('adkStatus');
             if (statusElement) {
-                const indicator = statusElement.querySelector('div');
+                const indicator = statusElement.querySelector('.status-indicator');
                 const text = statusElement.querySelector('span');
                 
+                if (indicator && text) {
+                    // Remove all existing status classes first
+                    indicator.classList.remove('online', 'offline');
+                
                 if (data.adk_available) {
-                    indicator.className = 'w-3 h-3 rounded-full status-indicator online';
+                        indicator.classList.add('online');
                     text.textContent = 'ADK Available';
                 } else {
-                    indicator.className = 'w-3 h-3 rounded-full status-indicator offline';
+                        indicator.classList.add('offline');
                     text.textContent = 'ADK Not Available';
+                    }
                 }
             }
         } catch (error) {
             console.error('Error checking ADK status:', error);
             const statusElement = document.getElementById('adkStatus');
             if (statusElement) {
-                const indicator = statusElement.querySelector('div');
+                const indicator = statusElement.querySelector('.status-indicator');
                 const text = statusElement.querySelector('span');
                 
-                indicator.className = 'w-3 h-3 rounded-full status-indicator offline';
+                if (indicator && text) {
+                    // Remove all existing status classes first
+                    indicator.classList.remove('online', 'offline');
+                    indicator.classList.add('offline');
                 text.textContent = 'Connection Error';
+                }
             }
         }
         
@@ -774,25 +792,49 @@ class AgentGeniePlatform {
         const div = document.createElement('div');
         div.className = 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow';
         
+        const agentCount = project.agents?.length || 0;
+        const toolCount = project.tools?.length || 0;
+        const lastUpdated = project.updated_at ? new Date(project.updated_at).toLocaleDateString() : 'Unknown';
+        
         div.innerHTML = `
             <div class="flex items-start justify-between mb-4">
                 <div class="flex-1">
                     <h3 class="text-lg font-semibold text-gray-900 mb-2">${project.name}</h3>
                     <p class="text-sm text-gray-600 mb-3">${project.description}</p>
-                    <div class="flex items-center space-x-2">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            ${project.agents?.length || 0} agents
+                    
+                    <!-- Project Stats -->
+                    <div class="flex items-center space-x-2 mb-3">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <i class="fas fa-robot mr-1"></i>${agentCount} agents
                         </span>
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            ${project.tools?.length || 0} tools
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <i class="fas fa-tools mr-1"></i>${toolCount} tools
+                        </span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <i class="fas fa-clock mr-1"></i>${lastUpdated}
                         </span>
                     </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="flex space-x-2">
+                        <button class="text-sm text-blue-600 hover:text-blue-800 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors" onclick="app.manageProjectAgents('${project.id}')">
+                            <i class="fas fa-plus mr-1"></i>Add Agents
+                        </button>
+                        <button class="text-sm text-green-600 hover:text-green-800 px-3 py-1 rounded-md hover:bg-green-50 transition-colors" onclick="app.manageProjectTools('${project.id}')">
+                            <i class="fas fa-plus mr-1"></i>Add Tools
+                        </button>
+                    </div>
                 </div>
-                <div class="flex space-x-2">
-                    <button class="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors" onclick="app.editProject('${project.id}')">
+                
+                <!-- Action Buttons -->
+                <div class="flex flex-col space-y-2">
+                    <button class="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors" onclick="app.editProject('${project.id}')" title="Edit Project">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors" onclick="app.deleteProject('${project.id}')">
+                    <button class="text-purple-500 hover:text-purple-700 p-2 rounded-lg hover:bg-purple-50 transition-colors" onclick="app.viewProjectDetails('${project.id}')" title="View Details">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors" onclick="app.deleteProject('${project.id}')" title="Delete Project">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -1153,9 +1195,507 @@ class AgentGeniePlatform {
         this.showMessage('Tool editing coming soon!', 'info');
     }
     
-    editProject(projectId) {
-        // Implementation for editing projects
-        this.showMessage('Project editing coming soon!', 'info');
+    async editProject(projectId) {
+        try {
+            // Find the project to edit
+            const project = this.projects.find(p => p.id === projectId);
+            if (!project) {
+                this.showMessage('Project not found', 'error');
+                return;
+            }
+
+            // Show edit modal
+            this.showProjectEditModal(project);
+        } catch (error) {
+            console.error('Error editing project:', error);
+            this.showMessage('Failed to edit project', 'error');
+        }
+    }
+
+    showProjectEditModal(project) {
+        // Create modal HTML
+        const modalHTML = `
+            <div id="projectEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Edit Project</h3>
+                        <button onclick="app.closeProjectEditModal()" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form id="projectEditForm" class="space-y-4">
+                        <div>
+                            <label for="editProjectName" class="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                            <input type="text" id="editProjectName" value="${project.name}" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                        
+                        <div>
+                            <label for="editProjectDescription" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                            <textarea id="editProjectDescription" rows="3" 
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>${project.description}</textarea>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3 pt-4">
+                            <button type="button" onclick="app.closeProjectEditModal()" 
+                                    class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit" 
+                                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        // Add form submit handler
+        document.getElementById('projectEditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.saveProjectEdit(project.id);
+        });
+    }
+
+    async saveProjectEdit(projectId) {
+        try {
+            const name = document.getElementById('editProjectName').value.trim();
+            const description = document.getElementById('editProjectDescription').value.trim();
+
+            if (!name || !description) {
+                this.showMessage('Name and description are required', 'error');
+                return;
+            }
+
+            const updates = { name, description };
+
+            const response = await fetch(`/api/projects/${projectId}/edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                this.showMessage('Project updated successfully!', 'success');
+                this.closeProjectEditModal();
+                
+                // Refresh projects list
+                await this.loadProjects();
+                this.renderProjectsGrid();
+            } else {
+                const error = await response.json();
+                this.showMessage(error.detail || 'Failed to update project', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving project edit:', error);
+            this.showMessage('Failed to save changes', 'error');
+        }
+    }
+
+    closeProjectEditModal() {
+        const modal = document.getElementById('projectEditModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    async manageProjectAgents(projectId) {
+        try {
+            const project = this.projects.find(p => p.id === projectId);
+            if (!project) {
+                this.showMessage('Project not found', 'error');
+                return;
+            }
+
+            this.showProjectAgentsModal(project);
+        } catch (error) {
+            console.error('Error managing project agents:', error);
+            this.showMessage('Failed to manage project agents', 'error');
+        }
+    }
+
+    showProjectAgentsModal(project) {
+        const modalHTML = `
+            <div id="projectAgentsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Manage Agents: ${project.name}</h3>
+                        <button onclick="app.closeProjectAgentsModal()" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Current Agents -->
+                    <div class="mb-6">
+                        <h4 class="text-md font-medium text-gray-700 mb-3">Current Agents (${project.agents?.length || 0})</h4>
+                        <div id="currentAgentsList" class="space-y-2">
+                            ${this.renderCurrentAgentsList(project)}
+                        </div>
+                    </div>
+                    
+                    <!-- Add New Agents -->
+                    <div>
+                        <h4 class="text-md font-medium text-gray-700 mb-3">Add New Agents</h4>
+                        <div class="space-y-2">
+                            ${this.renderAvailableAgentsList(project)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    renderCurrentAgentsList(project) {
+        if (!project.agents || project.agents.length === 0) {
+            return '<p class="text-gray-500 text-sm">No agents in this project yet.</p>';
+        }
+
+        return project.agents.map(agent => `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-robot text-blue-600"></i>
+                    <span class="font-medium">${agent.name}</span>
+                </div>
+                <button onclick="app.removeAgentFromProject('${project.id}', '${agent.id}')" 
+                        class="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    renderAvailableAgentsList(project) {
+        const currentAgentIds = project.agents?.map(a => a.id) || [];
+        const availableAgents = this.agents.filter(agent => !currentAgentIds.includes(agent.id));
+
+        if (availableAgents.length === 0) {
+            return '<p class="text-gray-500 text-sm">All available agents are already in this project.</p>';
+        }
+
+        return availableAgents.map(agent => `
+            <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-robot text-blue-600"></i>
+                    <span class="font-medium">${agent.name}</span>
+                    <span class="text-sm text-gray-600">${agent.description}</span>
+                </div>
+                <button onclick="app.addAgentToProject('${project.id}', '${agent.id}')" 
+                        class="text-blue-600 hover:text-blue-800 px-3 py-1 rounded hover:bg-blue-100">
+                    <i class="fas fa-plus mr-1"></i>Add
+                </button>
+            </div>
+        `).join('');
+    }
+
+    async addAgentToProject(projectId, agentId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/agents/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agent_id: agentId })
+            });
+
+            if (response.ok) {
+                this.showMessage('Agent added to project successfully!', 'success');
+                await this.loadProjects();
+                this.renderProjectsGrid();
+                this.closeProjectAgentsModal();
+            } else {
+                const error = await response.json();
+                this.showMessage(error.detail || 'Failed to add agent to project', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding agent to project:', error);
+            this.showMessage('Failed to add agent to project', 'error');
+        }
+    }
+
+    async removeAgentFromProject(projectId, agentId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/agents/${agentId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.showMessage('Agent removed from project successfully!', 'success');
+                await this.loadProjects();
+                this.renderProjectsGrid();
+                this.closeProjectAgentsModal();
+            } else {
+                const error = await response.json();
+                this.showMessage(error.detail || 'Failed to remove agent from project', 'error');
+            }
+        } catch (error) {
+            console.error('Error removing agent from project:', error);
+            this.showMessage('Failed to remove agent from project', 'error');
+        }
+    }
+
+    closeProjectAgentsModal() {
+        const modal = document.getElementById('projectAgentsModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    async manageProjectTools(projectId) {
+        try {
+            const project = this.projects.find(p => p.id === projectId);
+            if (!project) {
+                this.showMessage('Project not found', 'error');
+                return;
+            }
+
+            this.showProjectToolsModal(project);
+        } catch (error) {
+            console.error('Error managing project tools:', error);
+            this.showMessage('Failed to manage project tools', 'error');
+        }
+    }
+
+    showProjectToolsModal(project) {
+        const modalHTML = `
+            <div id="projectToolsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Manage Tools: ${project.name}</h3>
+                        <button onclick="app.closeProjectToolsModal()" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Current Tools -->
+                    <div class="mb-6">
+                        <h4 class="text-md font-medium text-gray-700 mb-3">Current Tools (${project.tools?.length || 0})</h4>
+                        <div id="currentToolsList" class="space-y-2">
+                            ${this.renderCurrentToolsList(project)}
+                        </div>
+                    </div>
+                    
+                    <!-- Add New Tools -->
+                    <div>
+                        <h4 class="text-md font-medium text-gray-700 mb-3">Add New Tools</h4>
+                        <div class="space-y-2">
+                            ${this.renderAvailableToolsList(project)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    renderCurrentToolsList(project) {
+        if (!project.tools || project.tools.length === 0) {
+            return '<p class="text-gray-500 text-sm">No tools in this project yet.</p>';
+        }
+
+        return project.tools.map(tool => `
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-tools text-green-600"></i>
+                    <span class="font-medium">${tool.name}</span>
+                </div>
+                <button onclick="app.removeToolFromProject('${project.id}', '${tool.id}')" 
+                        class="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    renderAvailableToolsList(project) {
+        const currentToolIds = project.tools?.map(t => t.id) || [];
+        const availableTools = this.tools.filter(tool => !currentToolIds.includes(tool.id));
+
+        if (availableTools.length === 0) {
+            return '<p class="text-gray-500 text-sm">All available tools are already in this project.</p>';
+        }
+
+        return availableTools.map(tool => `
+            <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-tools text-green-600"></i>
+                    <span class="font-medium">${tool.name}</span>
+                    <span class="text-sm text-gray-600">${tool.description}</span>
+                </div>
+                <button onclick="app.addToolToProject('${project.id}', '${tool.id}')" 
+                        class="text-green-600 hover:text-green-800 px-3 py-1 rounded hover:bg-green-100">
+                    <i class="fas fa-plus mr-1"></i>Add
+                </button>
+            </div>
+        `).join('');
+    }
+
+    async addToolToProject(projectId, toolId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/tools/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tool_id: toolId })
+            });
+
+            if (response.ok) {
+                this.showMessage('Tool added to project successfully!', 'success');
+                await this.loadProjects();
+                this.renderProjectsGrid();
+                this.closeProjectToolsModal();
+            } else {
+                const error = await response.json();
+                this.showMessage(error.detail || 'Failed to add tool to project', 'error');
+            }
+        } catch (error) {
+            console.error('Error adding tool to project:', error);
+            this.showMessage('Failed to add tool to project', 'error');
+        }
+    }
+
+    async removeToolFromProject(projectId, toolId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/tools/${toolId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.showMessage('Tool removed from project successfully!', 'success');
+                await this.loadProjects();
+                this.renderProjectsGrid();
+                this.closeProjectToolsModal();
+            } else {
+                const error = await response.json();
+                this.showMessage(error.detail || 'Failed to remove tool from project', 'error');
+            }
+        } catch (error) {
+            console.error('Error removing tool from project:', error);
+            this.showMessage('Failed to remove tool from project', 'error');
+        }
+    }
+
+    closeProjectToolsModal() {
+        const modal = document.getElementById('projectToolsModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    async viewProjectDetails(projectId) {
+        try {
+            const project = this.projects.find(p => p.id === projectId);
+            if (!project) {
+                this.showMessage('Project not found', 'error');
+                return;
+            }
+
+            this.showProjectDetailsModal(project);
+        } catch (error) {
+            console.error('Error viewing project details:', error);
+            this.showMessage('Failed to view project details', 'error');
+        }
+    }
+
+    showProjectDetailsModal(project) {
+        const modalHTML = `
+            <div id="projectDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg p-6 w-full max-w-3xl mx-4 max-h-[80vh] overflow-y-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Project Details: ${project.name}</h3>
+                        <button onclick="app.closeProjectDetailsModal()" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Project Info -->
+                        <div>
+                            <h4 class="text-md font-medium text-gray-700 mb-3">Project Information</h4>
+                            <div class="space-y-2">
+                                <div><strong>Name:</strong> ${project.name}</div>
+                                <div><strong>Description:</strong> ${project.description}</div>
+                                <div><strong>Created:</strong> ${project.created_at ? new Date(project.created_at).toLocaleString() : 'Unknown'}</div>
+                                <div><strong>Last Updated:</strong> ${project.updated_at ? new Date(project.updated_at).toLocaleString() : 'Unknown'}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Project Stats -->
+                        <div>
+                            <h4 class="text-md font-medium text-gray-700 mb-3">Project Statistics</h4>
+                            <div class="space-y-2">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fas fa-robot text-blue-600"></i>
+                                    <span><strong>Agents:</strong> ${project.agents?.length || 0}</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <i class="fas fa-tools text-green-600"></i>
+                                    <span><strong>Tools:</strong> ${project.tools?.length || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Agents List -->
+                    <div class="mt-6">
+                        <h4 class="text-md font-medium text-gray-700 mb-3">Project Agents</h4>
+                        <div class="space-y-2">
+                            ${this.renderProjectAgentsList(project)}
+                        </div>
+                    </div>
+                    
+                    <!-- Tools List -->
+                    <div class="mt-6">
+                        <h4 class="text-md font-medium text-gray-700 mb-3">Project Tools</h4>
+                        <div class="space-y-2">
+                            ${this.renderProjectToolsList(project)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    }
+
+    renderProjectAgentsList(project) {
+        if (!project.agents || project.agents.length === 0) {
+            return '<p class="text-gray-500 text-sm">No agents in this project.</p>';
+        }
+
+        return project.agents.map(agent => `
+            <div class="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                <i class="fas fa-robot text-blue-600"></i>
+                <span class="font-medium">${agent.name}</span>
+                <span class="text-sm text-gray-600">Added: ${agent.added_at ? new Date(agent.added_at).toLocaleDateString() : 'Unknown'}</span>
+            </div>
+        `).join('');
+    }
+
+    renderProjectToolsList(project) {
+        if (!project.tools || project.tools.length === 0) {
+            return '<p class="text-gray-500 text-sm">No tools in this project.</p>';
+        }
+
+        return project.tools.map(tool => `
+            <div class="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                <i class="fas fa-tools text-green-600"></i>
+                <span class="font-medium">${tool.name}</span>
+                <span class="text-sm text-gray-600">Added: ${tool.added_at ? new Date(tool.added_at).toLocaleDateString() : 'Unknown'}</span>
+            </div>
+        `).join('');
+    }
+
+    closeProjectDetailsModal() {
+        const modal = document.getElementById('projectDetailsModal');
+        if (modal) {
+            modal.remove();
+        }
     }
     
     populateAgentForm(agent) {
@@ -1798,7 +2338,7 @@ class AgentGeniePlatform {
                 `;
                 container.appendChild(agentDiv);
             }
-        });
+                });
         
         // Update the selection count display
         this.updateSubAgentSelectionCount();
@@ -1875,7 +2415,330 @@ class AgentGeniePlatform {
         return newSubAgents;
     }
     
-
+    // Agent Embedding Methods
+    async createAgentEmbed(agentId) {
+        try {
+            const response = await fetch(`/api/agents/${agentId}/embed`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Show the embed code
+            this.showEmbedCode(data.embed_code, data.embed_url);
+            
+            this.showMessage('Agent embed created successfully!', 'success');
+            
+        } catch (error) {
+            console.error('Error creating agent embed:', error);
+            this.showMessage('Failed to create agent embed: ' + error.message, 'error');
+        }
+    }
+    
+    showEmbedCode(embedCode, embedUrl) {
+        const container = document.getElementById('embedCodeContainer');
+        const codeTextarea = document.getElementById('embedCode');
+        
+        if (container && codeTextarea) {
+            codeTextarea.value = embedCode;
+            container.classList.remove('hidden');
+            
+            // Scroll to the embed code
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+    
+    copyEmbedCode() {
+        const codeTextarea = document.getElementById('embedCode');
+        if (codeTextarea) {
+            codeTextarea.select();
+            document.execCommand('copy');
+            this.showMessage('Embed code copied to clipboard!', 'success');
+        }
+    }
+    
+    previewEmbed(embedUrl) {
+        // Open embed preview in new window
+        const fullUrl = window.location.origin + embedUrl;
+        window.open(fullUrl, '_blank', 'width=800,height=600');
+    }
+    
+    bindEmbedEvents() {
+        // Create embed button
+        const createEmbedBtn = document.getElementById('createEmbedBtn');
+        if (createEmbedBtn) {
+            createEmbedBtn.addEventListener('click', () => {
+                // Get current agent ID from the form or create a temporary one
+                const agentName = document.getElementById('agentName')?.value;
+                if (agentName) {
+                    // For now, create embed with a temporary ID
+                    // In a real implementation, you'd want to save the agent first
+                    this.showMessage('Please save the agent first, then create an embed', 'info');
+                } else {
+                    this.showMessage('Please fill in the agent details first', 'info');
+                }
+            });
+        }
+        
+        // Copy embed code button
+        const copyEmbedCodeBtn = document.getElementById('copyEmbedCodeBtn');
+        if (copyEmbedCodeBtn) {
+            copyEmbedCodeBtn.addEventListener('click', () => this.copyEmbedCode());
+        }
+        
+        // Preview embed button
+        const previewEmbedBtn = document.getElementById('previewEmbedBtn');
+        if (previewEmbedBtn) {
+            previewEmbedBtn.addEventListener('click', () => {
+                const embedUrl = document.getElementById('embedCode')?.value.match(/src="([^"]+)"/)?.[1];
+                if (embedUrl) {
+                    this.previewEmbed(embedUrl);
+                } else {
+                    this.showMessage('No embed URL found', 'error');
+                }
+            });
+        }
+        
+        // Embed agent select change
+        const embedAgentSelect = document.getElementById('embedAgentSelect');
+        if (embedAgentSelect) {
+            embedAgentSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    this.loadAgentEmbeds(e.target.value);
+                } else {
+                    this.clearEmbedsList();
+                }
+            });
+        }
+    }
+    
+    populateEmbedAgentSelect() {
+        const select = document.getElementById('embedAgentSelect');
+        if (!select) return;
+        
+        // Clear existing options
+        select.innerHTML = '<option value="">Choose an agent...</option>';
+        
+        // Add agents
+        this.agents.forEach(agent => {
+            const option = document.createElement('option');
+            option.value = agent.id;
+            option.textContent = agent.name;
+            select.appendChild(option);
+        });
+    }
+    
+    async loadAgentEmbeds(agentId = null) {
+        if (!agentId) {
+            const select = document.getElementById('embedAgentSelect');
+            agentId = select?.value;
+        }
+        
+        if (!agentId) {
+            this.clearEmbedsList();
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/agents/${agentId}/embeds`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            this.renderEmbedsList(data.embeds, agentId);
+            
+        } catch (error) {
+            console.error('Error loading agent embeds:', error);
+            this.showMessage('Failed to load embeds: ' + error.message, 'error');
+        }
+    }
+    
+    renderEmbedsList(embeds, agentId) {
+        const container = document.getElementById('embedsList');
+        if (!container) return;
+        
+        if (!embeds || embeds.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-gray-500 py-8">
+                    <i class="fas fa-code text-4xl mb-4"></i>
+                    <p>No embeds found for this agent</p>
+                    <button onclick="app.createNewEmbed('${agentId}')" class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Create First Embed
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = `
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Active Embeds</h3>
+                <button onclick="app.createNewEmbed('${agentId}')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Create New Embed
+                </button>
+            </div>
+        `;
+        
+        embeds.forEach(embed => {
+            const embedUrl = `/api/embed/${embed.embed_id}`;
+            const fullUrl = window.location.origin + embedUrl;
+            
+            html += `
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h4 class="font-medium text-gray-900">${embed.agent_name}</h4>
+                            <p class="text-sm text-gray-600">Created: ${new Date(embed.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                ${embed.access_count} views
+                            </span>
+                            <button onclick="app.deleteEmbed('${embed.embed_id}')" class="text-red-600 hover:text-red-800 transition-colors" title="Delete embed">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Embed URL:</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="text" value="${fullUrl}" readonly class="flex-1 p-2 border border-gray-300 rounded-md bg-gray-50 text-sm">
+                                <button onclick="app.copyToClipboard('${fullUrl}')" class="px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Embed Code:</label>
+                            <textarea readonly rows="3" class="w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-sm font-mono">${this.generateEmbedCode(embed.agent_name, fullUrl)}</textarea>
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <button onclick="app.previewEmbed('${embedUrl}')" class="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors">
+                                <i class="fas fa-eye mr-2"></i>Preview
+                            </button>
+                            <button onclick="app.testEmbed('${embed.embed_id}')" class="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                                <i class="fas fa-comments mr-2"></i>Test Chat
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    generateEmbedCode(agentName, embedUrl) {
+        return `<!-- ${agentName} Agent Embed Code -->
+<div id="adk-agent-embed" style="width: 100%; max-width: 600px; margin: 0 auto;">
+    <iframe 
+        src="${embedUrl}" 
+        width="100%" 
+        height="600" 
+        frameborder="0" 
+        scrolling="no"
+        style="border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+    </iframe>
+</div>`;
+    }
+    
+    clearEmbedsList() {
+        const container = document.getElementById('embedsList');
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center text-gray-500 py-8">
+                    <i class="fas fa-code text-4xl mb-4"></i>
+                    <p>Select an agent to view and manage its embeds</p>
+                </div>
+            `;
+        }
+    }
+    
+    async createNewEmbed(agentId) {
+        try {
+            const response = await fetch(`/api/agents/${agentId}/embed`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Reload embeds list
+            this.loadAgentEmbeds(agentId);
+            
+            this.showMessage('New embed created successfully!', 'success');
+            
+        } catch (error) {
+            console.error('Error creating embed:', error);
+            this.showMessage('Failed to create embed: ' + error.message, 'error');
+        }
+    }
+    
+    async deleteEmbed(embedId) {
+        if (!confirm('Are you sure you want to delete this embed? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/embed/${embedId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // Reload embeds list
+            const select = document.getElementById('embedAgentSelect');
+            if (select && select.value) {
+                this.loadAgentEmbeds(select.value);
+            }
+            
+            this.showMessage('Embed deleted successfully!', 'success');
+            
+        } catch (error) {
+            console.error('Error deleting embed:', error);
+            this.showMessage('Failed to delete embed: ' + error.message, 'error');
+        }
+    }
+    
+    copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            this.showMessage('Copied to clipboard!', 'success');
+        }).catch(() => {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            this.showMessage('Copied to clipboard!', 'success');
+        });
+    }
+    
+    testEmbed(embedId) {
+        const embedUrl = `/api/embed/${embedId}`;
+        this.previewEmbed(embedUrl);
+    }
 }
 
 // Initialize the application when DOM is loaded

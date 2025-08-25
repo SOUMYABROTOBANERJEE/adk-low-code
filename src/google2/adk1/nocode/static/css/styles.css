@@ -1,8 +1,20 @@
 /* Agent Genie - Tata Steel AI Platform Styles */
 
+/* Base Layout Improvements */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    overflow-x: hidden;
+}
+
 /* Status Indicators */
 .status-indicator {
     transition: all 0.3s ease;
+    flex-shrink: 0;
+    background-color: #9CA3AF; /* Default neutral gray */
+    box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.2);
 }
 
 .status-indicator.online {
@@ -16,11 +28,24 @@
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
+/* Text Overflow Handling */
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.min-w-0 {
+    min-width: 0;
+}
+
 /* Navigation Links */
 .nav-link {
     transition: all 0.2s ease;
     padding: 0.4rem 0.65rem;
     border-radius: 0.5rem;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .nav-link.active {
@@ -33,6 +58,31 @@
 .nav-link:hover {
     background-color: rgba(74, 144, 226, 0.10);
     color: #1f2937; /* slightly darker text on hover */
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .nav-link {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .nav-link {
+        padding: 0.25rem 0.4rem;
+        font-size: 0.8rem;
+    }
+}
+
+/* Logo and Brand */
+.logo-tata-steel {
+    flex-shrink: 0;
+}
+
+/* User Menu */
+#userDisplayName {
+    max-width: 6rem;
 }
 
 /* Modal Animations */
@@ -102,101 +152,66 @@
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
 }
 
-/* Chat Messages */
-.chat-message {
-    margin-bottom: 1rem;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Form Focus States */
-input:focus, textarea:focus, select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* Button Hover Effects */
-.btn-primary {
+/* Dashboard Improvements */
+.dashboard-stat-card {
     transition: all 0.2s ease;
 }
 
-.btn-primary:hover {
+.dashboard-stat-card:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Magic Wand Button */
-.magic-wand {
+/* Quick Action Buttons */
+.quick-action-btn {
     transition: all 0.2s ease;
 }
 
-.magic-wand:hover {
-    transform: scale(1.1);
-    color: #3b82f6;
+.quick-action-btn:hover {
+    transform: scale(1.02);
 }
 
-/* Section Transitions */
-.section {
-    transition: opacity 0.3s ease, transform 0.3s ease;
+/* Status Container */
+#adkStatus {
+    flex-shrink: 0;
 }
 
-.section.hidden {
-    opacity: 0;
-    transform: translateY(20px);
-    pointer-events: none;
+#adkStatus span {
+    white-space: nowrap;
 }
 
-/* Dashboard Stats */
-.stat-card {
-    transition: all 0.2s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-}
-
-/* Loading Overlay */
-.loading-overlay {
-    backdrop-filter: blur(4px);
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .nav-link {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.875rem;
+/* Responsive Grid Adjustments */
+@media (max-width: 640px) {
+    .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
     }
-    
-    .modal {
-        margin: 1rem;
-        width: calc(100% - 2rem);
-    }
-    
-    .grid {
+}
+
+@media (max-width: 480px) {
+    .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-4 {
         grid-template-columns: 1fr;
     }
 }
 
-/* Logo Styling */
-.logo-tata-steel {
-    max-height: 100%;
-    width: auto;
-    object-fit: contain;
+/* Ensure proper spacing on mobile */
+@media (max-width: 768px) {
+    .space-x-4 > * + * {
+        margin-left: 0.75rem;
+    }
+    
+    .space-x-3 > * + * {
+        margin-left: 0.5rem;
+    }
 }
 
-.logo-tata-steel:hover {
-    opacity: 0.9;
-    transition: opacity 0.2s ease;
+/* Fix for very small screens */
+@media (max-width: 375px) {
+    .px-4 {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    
+    .space-x-4 > * + * {
+        margin-left: 0.5rem;
+    }
 }

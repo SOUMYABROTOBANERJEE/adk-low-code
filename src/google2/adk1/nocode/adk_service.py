@@ -636,3 +636,40 @@ class ADKService:
             del self.sessions[session_id]
             return True
         return False
+    
+    async def process_message(self, agent: Dict[str, Any], message: str) -> str:
+        """Process a message through an agent for embedded chat"""
+        try:
+            # Create a simple agent instance for processing
+            if agent.get('agent_type') == 'llm':
+                # For LLM agents, use the system prompt
+                system_prompt = agent.get('system_prompt', 'You are a helpful AI assistant.')
+                
+                # Use GenAI for simple text generation if available
+                if self.genai_client:
+                    try:
+                        # Use the correct GenAI API method
+                        response = self.genai_client.models.generate_content(
+                            model='gemini-2.0-flash-001',
+                            contents=f"{system_prompt}\n\nUser: {message}\n\nAssistant:"
+                        )
+                        return response.text
+                    except Exception as genai_error:
+                        print(f"GenAI error: {genai_error}")
+                        # Fallback response
+                        return f"I understand you said: '{message}'. I'm configured as {agent.get('name', 'an AI assistant')}."
+                else:
+                    # Fallback response
+                    return f"I understand you said: '{message}'. I'm configured as {agent.get('name', 'an AI assistant')}."
+            
+            elif agent.get('agent_type') == 'workflow':
+                # For workflow agents, provide a structured response
+                return f"As a workflow agent ({agent.get('name', 'AI Assistant')}), I can help you with: {agent.get('description', 'various tasks')}. Your message: '{message}'"
+            
+            else:
+                # Generic response for other agent types
+                return f"Hello! I'm {agent.get('name', 'an AI agent')}. I received your message: '{message}'. How can I assist you?"
+                
+        except Exception as e:
+            print(f"Error processing message: {e}")
+            return "I'm sorry, I encountered an error processing your message. Please try again."

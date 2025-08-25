@@ -72,6 +72,14 @@ A powerful, production-ready platform for building and deploying AI agents using
 - **Dynamic Agent Creation**: On-the-fly sub-agent generation
 - **Agent Linking**: Connect existing agents as sub-agents
 
+### 🌐 **Website Embedding**
+- **Unique Embed URLs**: Each agent gets a unique, shareable URL
+- **Iframe Integration**: Easy iframe embedding for any website
+- **JavaScript Widgets**: Direct JavaScript integration options
+- **Responsive Design**: Mobile-friendly embedded interfaces
+- **Chat Functionality**: Full chat capabilities in embedded agents
+- **Access Tracking**: Monitor embed usage and performance
+
 ### 💾 **Persistent Storage**
 - **SQLite Database**: Local development with easy migration path
 - **GCP Ready**: Designed for Firestore/BigQuery migration
@@ -341,6 +349,13 @@ curl -X POST http://127.0.0.1:8083/api/auth/login \
 - `GET /api/agents/available-for-sub` - Get available agents for sub-agents
 - `POST /api/agents/{agent_id}/sub-agents/from-existing` - Link existing agent as sub-agent
 - `DELETE /api/agents/{agent_id}/sub-agents/{sub_agent_id}` - Remove sub-agent
+
+### **Agent Embedding Endpoints**
+- `POST /api/agents/{agent_id}/embed` - Create an embeddable version of an agent
+- `GET /api/embed/{embed_id}` - Get embedded agent interface
+- `POST /api/embed/{embed_id}/chat` - Handle chat requests from embedded agents
+- `GET /api/agents/{agent_id}/embeds` - List all embeds for an agent
+- `DELETE /api/embed/{embed_id}` - Delete an agent embed
 
 ### **Project Endpoints**
 - `POST /api/projects` - Create new project

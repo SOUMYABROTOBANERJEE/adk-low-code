@@ -102,8 +102,7 @@ class DatabaseManager:
                         password_hash TEXT NOT NULL,
                         is_active BOOLEAN DEFAULT 1,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        last_login TIMESTAMP,
-                        metadata TEXT
+                        last_login TIMESTAMP
                     )
                 ''')
                 
@@ -119,6 +118,20 @@ class DatabaseManager:
                         user_agent TEXT,
                         ip_address TEXT,
                         FOREIGN KEY (user_id) REFERENCES users (id)
+                    )
+                ''')
+                
+                # Create agent_embeds table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS agent_embeds (
+                        embed_id TEXT PRIMARY KEY,
+                        agent_id TEXT NOT NULL,
+                        agent_name TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active BOOLEAN DEFAULT 1,
+                        access_count INTEGER DEFAULT 0,
+                        last_accessed TIMESTAMP,
+                        FOREIGN KEY (agent_id) REFERENCES agents (id)
                     )
                 ''')
                 
@@ -785,6 +798,104 @@ class DatabaseManager:
                 
         except Exception as e:
             logger.error(f"Error deleting user session: {e}")
+            return False
+    
+    # Agent Embed Management
+    def save_agent_embed(self, embed_data: Dict[str, Any]) -> bool:
+        """Save or update an agent embed"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    INSERT INTO agent_embeds (
+                        embed_id, agent_id, agent_name, created_at, is_active, access_count, last_accessed
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    embed_data['embed_id'],
+                    embed_data['agent_id'],
+                    embed_data['agent_name'],
+                    embed_data['created_at'],
+                    embed_data['is_active'],
+                    embed_data['access_count'],
+                    embed_data['last_accessed']
+                ))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error saving agent embed: {e}")
+            return False
+    
+    def get_agent_embed(self, embed_id: str) -> Optional[Dict[str, Any]]:
+        """Get an agent embed by ID"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM agent_embeds WHERE embed_id = ?", (embed_id,))
+                row = cursor.fetchone()
+                
+                if row:
+                    columns = [description[0] for description in cursor.description]
+                    embed_data = dict(zip(columns, row))
+                    return embed_data
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting agent embed: {e}")
+            return None
+    
+    def get_agent_embeds(self, agent_id: str) -> List[Dict[str, Any]]:
+        """Get all embeds for an agent"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM agent_embeds WHERE agent_id = ? ORDER BY created_at DESC", (agent_id,))
+                rows = cursor.fetchall()
+                
+                embeds = []
+                for row in rows:
+                    columns = [description[0] for description in cursor.description]
+                    embed_data = dict(zip(columns, row))
+                    embeds.append(embed_data)
+                
+                return embeds
+                
+        except Exception as e:
+            logger.error(f"Error getting agent embeds: {e}")
+            return []
+    
+    def update_embed_access(self, embed_id: str) -> bool:
+        """Update embed access statistics"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE agent_embeds SET
+                        access_count = access_count + 1,
+                        last_accessed = CURRENT_TIMESTAMP
+                    WHERE embed_id = ?
+                ''', (embed_id,))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error updating embed access: {e}")
+            return False
+    
+    def delete_agent_embed(self, embed_id: str) -> bool:
+        """Delete an agent embed"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM agent_embeds WHERE embed_id = ?", (embed_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+                
+        except Exception as e:
+            logger.error(f"Error deleting agent embed: {e}")
             return False
     
     def close(self):
