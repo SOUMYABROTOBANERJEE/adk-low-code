@@ -1,0 +1,21 @@
+# Code Genie Workspace Ignore File
+# ---------------------------------
+# Add files and patterns here to exclude them from the workspace summary.
+# This helps the AI focus on the most relevant parts of your code.
+#
+# The syntax is the same as .gitignore.
+
+# Default patterns (can be overridden in VS Code settings)
+node_modules/
+dist/
+build/
+out/
+*.log
+*.lock
+
+# Add your project-specific patterns below
+# For example:
+#
+# /temp/
+# *.tmp
+# /config/secrets.json
