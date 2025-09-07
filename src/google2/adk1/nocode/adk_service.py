@@ -441,12 +441,11 @@ class ADKService:
             return None
             
         try:
-            # Create the model with API key
+            # Create the model with service account authentication
             model = Gemini(
                 model=config.model_settings.get("model", "gemini-2.0-flash"),
                 temperature=config.model_settings.get("temperature", 0.7),
-                max_output_tokens=config.model_settings.get("max_tokens", 1000),
-                api_key=self.api_key
+                max_output_tokens=config.model_settings.get("max_tokens", 1000)
             )
             
             # Create the agent

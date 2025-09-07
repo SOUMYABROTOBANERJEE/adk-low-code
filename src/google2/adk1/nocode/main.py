@@ -113,6 +113,20 @@ def execute(expression: str) -> str:
                 db_manager.save_tool(sample_tool.model_dump())
                 print(f"Sample tool '{sample_tool.name}' created and saved to database")
         
+        # Register existing tools from database with ADK service
+        if adk_service.is_available() and existing_tools:
+            print("Registering existing tools from database...")
+            for tool_data in existing_tools:
+                try:
+                    tool = ToolDefinition(**tool_data)
+                    if adk_service.register_tool(tool):
+                        print(f"Registered tool: {tool.name}")
+                    else:
+                        print(f"Failed to register tool: {tool.name}")
+                except Exception as e:
+                    print(f"Error creating tool {tool_data.get('name', 'unknown')}: {e}")
+                    print(f"Tool data: {tool_data}")
+        
         # Register built-in tools with ADK service
         if adk_service.is_available():
             print("Registering built-in tools...")
@@ -882,14 +896,9 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
         
         if not session_id:
             session_id = str(uuid.uuid4())
-        
-<<<<<<< Updated upstream
-        # Execute agent
-        result = await adk_service.execute_agent(agent_id.strip(), prompt.strip(), session_id)
-=======
+        user_id = user_email
         # Execute agent with user_id for Cloud Trace tracking
         result = await adk_service.execute_agent(agent_id, prompt, session_id, user_id)
->>>>>>> Stashed changes
         
         # Trace agent execution with Langfuse using email as user_id
         if langfuse_service.is_langfuse_available():

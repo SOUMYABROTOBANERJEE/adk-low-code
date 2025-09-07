@@ -12,7 +12,7 @@ import asyncio
 # OpenTelemetry imports for Cloud Trace
 try:
     from opentelemetry import trace
-    from opentelemetry.exporter.gcp_trace import CloudTraceSpanExporter
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
     from opentelemetry.sdk.trace import export
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
