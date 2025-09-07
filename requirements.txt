@@ -12,6 +12,19 @@ google-adk==1.8
 google-genai>=0.3.0
 google-cloud-aiplatform>=1.38.0
 
+# Google Cloud Firestore dependencies
+google-cloud-firestore>=2.11.0
+google-auth>=2.17.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+
+# Google Cloud Trace dependencies for observability
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-cloud-trace>=1.20.0
+opentelemetry-instrumentation-fastapi>=0.42b0
+opentelemetry-instrumentation-requests>=0.42b0
+
 # Web framework and UI
 aiofiles>=23.2.1
 websockets>=12.0

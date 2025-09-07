@@ -24,6 +24,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy source code
 COPY . .
 COPY app.py .
+COPY svcacct.json .
+
+# Set environment variable for Google Cloud
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/svcacct.json
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app && \

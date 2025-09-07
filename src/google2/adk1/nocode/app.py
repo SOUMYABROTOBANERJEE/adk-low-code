@@ -39,23 +39,24 @@ try:
 except ImportError:
     GOOGLE_ADK_AVAILABLE = False
 
-# Google Gemini API Configuration
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', 'AIzaSyAameifAiVmm05ww2Ib5ofFmvbGGHFTSnk')
+# Google Gemini API Configuration - Using Service Account Authentication
+# No API key needed when using service account authentication
 GOOGLE_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 def check_google_api_key():
-    """Check if Google API key is valid by making a test request."""
-    if not GOOGLE_API_KEY:
+    """Check if Google service account is available."""
+    if not os.path.exists("svcacct.json"):
         return False
     
     try:
-        # Test the API key with a simple request
-        test_url = f"{GOOGLE_API_BASE_URL}/gemini-1.5-flash"
-        headers = {"Authorization": f"Bearer {GOOGLE_API_KEY}"}
-        response = requests.get(test_url, headers=headers, timeout=10)
-        return response.status_code == 200
+        # Set the service account credentials
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "svcacct.json"
+        # Use service account authentication
+        from google.auth import default
+        credentials, project = default()
+        return credentials is not None and project is not None
     except Exception as e:
-        print(f"Error checking Google API key: {e}")
+        print(f"Error checking Google service account: {e}")
         return False
 
 # Define model classes
@@ -180,7 +181,7 @@ def create_app():
     async def get_config():
         """Get application configuration and API key status."""
         return {
-            "google_api_key_configured": bool(GOOGLE_API_KEY),
+            "google_service_account_configured": check_google_api_key(),
             "google_api_available": check_google_api_key(),
             "ollama_available": OLLAMA_AVAILABLE,
             "api_base_urls": {

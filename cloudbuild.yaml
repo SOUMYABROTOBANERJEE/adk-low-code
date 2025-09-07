@@ -33,6 +33,8 @@ steps:
       - 'GOOGLE_API_KEY=${_GOOGLE_API_KEY}'
       - '--port'
       - '8080'
+      - '--service-account'
+      - 'svc-generative-ai@tsl-generative-ai.iam.gserviceaccount.com'
 
 # Store images in Google Container Registry
 images:

@@ -5,6 +5,7 @@ Main FastAPI application for the Google ADK No-Code Platform
 import uuid
 import json
 import logging
+import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -24,15 +25,31 @@ from .models import (
 )
 from .adk_service import ADKService
 from .database import DatabaseManager
+from .firestore_manager import FirestoreManager
 from .auth_service import AuthService
 from .langfuse_service import LangfuseService
+from .traced_agent_runner import initialize_fastapi_tracing
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize services
-db_manager = DatabaseManager()
+def get_database_manager():
+    """Get database manager - Firestore for production, SQLite for development"""
+    try:
+        # Check if we're in production mode (service account file exists)
+        if os.path.exists("svcacct.json"):
+            print("🔥 Using Firestore database (Production mode)")
+            return FirestoreManager()
+        else:
+            print("💾 Using SQLite database (Development mode)")
+            return DatabaseManager()
+    except Exception as e:
+        print(f"⚠️  Failed to initialize Firestore, falling back to SQLite: {e}")
+        return DatabaseManager()
+
+db_manager = get_database_manager()
 adk_service = ADKService(db_manager)
 auth_service = AuthService(db_manager)
 langfuse_service = LangfuseService()
@@ -48,8 +65,17 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     # Startup
     try:
-        # Database is already initialized in DatabaseManager constructor
+        # Database is already initialized
         print("Database initialized successfully!")
+        
+        # Initialize Firestore collections if using Firestore
+        if isinstance(db_manager, FirestoreManager):
+            try:
+                print("Initializing Firestore collections...")
+                db_manager.initialize_collections()
+                print("✅ Firestore collections initialized")
+            except Exception as e:
+                print(f"⚠️  Firestore collection initialization failed: {e}")
         
         # Check if we have any existing data
         existing_tools = db_manager.get_all_tools()
@@ -57,6 +83,11 @@ async def lifespan(app: FastAPI):
         
         print(f"Found {len(existing_tools)} existing tools in database")
         print(f"Found {len(existing_agents)} existing agents in database")
+        
+        # Initialize FastAPI tracing for Cloud Trace
+        print("Initializing FastAPI tracing for Cloud Trace...")
+        initialize_fastapi_tracing(app)
+        print("✅ FastAPI tracing initialized")
         
         if not existing_tools:
             # Create sample tools if none exist
@@ -183,6 +214,36 @@ async def health_check():
         "langfuse_available": langfuse_service.is_langfuse_available(),
         "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/api/trace-info")
+async def get_trace_info():
+    """Get information about Cloud Trace setup"""
+    try:
+        if hasattr(adk_service, 'traced_runner') and adk_service.traced_runner:
+            trace_info = adk_service.traced_runner.get_trace_info()
+            return {
+                "success": True,
+                "tracing_enabled": trace_info.get("tracing_enabled", False),
+                "project_id": trace_info.get("project_id", "unknown"),
+                "app_name": trace_info.get("app_name", "unknown"),
+                "opentelemetry_available": trace_info.get("opentelemetry_available", False),
+                "adk_available": trace_info.get("adk_available", False),
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "tracing_enabled": False,
+                "error": "Traced runner not available",
+                "timestamp": datetime.now().isoformat()
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "tracing_enabled": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 
 # Authentication Endpoints
@@ -822,8 +883,13 @@ async def chat_with_agent(agent_id: str, request: Dict[str, Any], req: Request):
         if not session_id:
             session_id = str(uuid.uuid4())
         
+<<<<<<< Updated upstream
         # Execute agent
         result = await adk_service.execute_agent(agent_id.strip(), prompt.strip(), session_id)
+=======
+        # Execute agent with user_id for Cloud Trace tracking
+        result = await adk_service.execute_agent(agent_id, prompt, session_id, user_id)
+>>>>>>> Stashed changes
         
         # Trace agent execution with Langfuse using email as user_id
         if langfuse_service.is_langfuse_available():

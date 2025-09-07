@@ -46,6 +46,7 @@ from .models import (
     AgentConfiguration, ToolDefinition, SubAgent, AgentType, 
     ToolType, AgentExecutionResult, ChatMessage
 )
+from .traced_agent_runner import get_traced_runner
 
 
 class ADKService:
@@ -62,18 +63,40 @@ class ADKService:
         self.session_service = InMemorySessionService() if ADK_AVAILABLE else None
         self.app_name = "google_adk_platform"
         self.user_id = "default_user"
-        self.api_key = os.getenv("GOOGLE_API_KEY")
         self.db_manager = db_manager
         
-        # Set environment variable for Google AI if not already set
-        if self.api_key and not os.getenv("GOOGLE_API_KEY"):
-            os.environ["GOOGLE_API_KEY"] = self.api_key
+        # Set up service account authentication for all Google services
+        if os.path.exists("svcacct.json"):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "svcacct.json"
+            print("Service account authentication configured")
+        else:
+            print("Warning: No service account file found. Some features may not work.")
+        
+        # Initialize traced runner for Cloud Trace integration
+        self.traced_runner = None
+        if ADK_AVAILABLE:
+            try:
+                self.traced_runner = get_traced_runner(
+                    project_id="tsl-generative-ai",
+                    app_name=self.app_name,
+                    session_service=self.session_service
+                )
+                print("Traced agent runner initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize traced runner: {e}")
+                self.traced_runner = None
         
         # Initialize Google GenAI client for prompt suggestions
         if GENAI_AVAILABLE:
             try:
-                self.genai_client = genai.Client(api_key=self.api_key)
-                print("Google GenAI client initialized successfully")
+                # Only use service account authentication
+                if os.path.exists("svcacct.json"):
+                    # Initialize without API key to use service account
+                    self.genai_client = genai.Client()
+                    print("Google GenAI client initialized with service account authentication")
+                else:
+                    print("No service account file found. Google GenAI client not initialized.")
+                    self.genai_client = None
             except Exception as exc:
                 print(f"Failed to initialize Google GenAI client: {exc}")
                 self.genai_client = None
@@ -496,7 +519,7 @@ class ADKService:
             print(f"Error registering agent {config.name}: {exc}")
             return False
     
-    async def execute_agent(self, agent_id: str, prompt: str, session_id: Optional[str] = None) -> AgentExecutionResult:
+    async def execute_agent(self, agent_id: str, prompt: str, session_id: Optional[str] = None, user_id: Optional[str] = None) -> AgentExecutionResult:
         """Execute an agent with a given prompt"""
         if not ADK_AVAILABLE:
             return AgentExecutionResult(
@@ -534,45 +557,73 @@ class ADKService:
         
         start_time = time.time()
         
+        # Use provided user_id or default
+        effective_user_id = user_id or self.user_id
+        
         try:
-            
             # Create or get session
             if not session_id:
                 session_id = str(uuid.uuid4())
             
-            # Ensure session exists
-            try:
-                await self.session_service.create_session(
-                    app_name=self.app_name,
-                    user_id=self.user_id,
-                    session_id=session_id
+            # Use traced runner if available, otherwise fall back to regular runner
+            if self.traced_runner:
+                # Execute with Cloud Trace integration
+                trace_result = await self.traced_runner.run_agent_with_trace(
+                    agent=agent,
+                    user_id=effective_user_id,
+                    session_id=session_id,
+                    user_message=prompt,
+                    agent_id=agent_id,
+                    additional_context={
+                        "prompt_length": len(prompt),
+                        "agent_type": getattr(agent, 'agent_type', 'unknown'),
+                        "model": getattr(agent, 'model', 'unknown')
+                    }
                 )
-            except:
-                pass  # Session might already exist
-            
-            # Create runner for the agent
-            runner = Runner(
-                agent=agent,
-                app_name=self.app_name,
-                session_service=self.session_service
-            )
-            
-            # Format the message using Google ADK types
-            user_content = types.Content(
-                role='user',
-                parts=[types.Part(text=prompt)]
-            )
-            
-            # Execute the agent using the runner
-            final_response = "No response received"
-            async for event in runner.run_async(
-                user_id=self.user_id,
-                session_id=session_id,
-                new_message=user_content
-            ):
-                if event.is_final_response() and event.content and event.content.parts:
-                    final_response = event.content.parts[0].text
-                    break
+                
+                if trace_result.get("success"):
+                    final_response = trace_result.get("response", "No response received")
+                else:
+                    return AgentExecutionResult(
+                        success=False,
+                        error=trace_result.get("error", "Unknown error"),
+                        execution_time=time.time() - start_time
+                    )
+            else:
+                # Fallback to regular execution without tracing
+                # Ensure session exists
+                try:
+                    await self.session_service.create_session(
+                        app_name=self.app_name,
+                        user_id=effective_user_id,
+                        session_id=session_id
+                    )
+                except:
+                    pass  # Session might already exist
+                
+                # Create runner for the agent
+                runner = Runner(
+                    agent=agent,
+                    app_name=self.app_name,
+                    session_service=self.session_service
+                )
+                
+                # Format the message using Google ADK types
+                user_content = types.Content(
+                    role='user',
+                    parts=[types.Part(text=prompt)]
+                )
+                
+                # Execute the agent using the runner
+                final_response = "No response received"
+                async for event in runner.run_async(
+                    user_id=effective_user_id,
+                    session_id=session_id,
+                    new_message=user_content
+                ):
+                    if event.is_final_response() and event.content and event.content.parts:
+                        final_response = event.content.parts[0].text
+                        break
             
             result_text = final_response
             
@@ -600,6 +651,30 @@ class ADKService:
                     timestamp=str(time.time())
                 )
                 self.sessions[session_id].append(assistant_message)
+                
+                # Store in database if available
+                if self.db_manager:
+                    try:
+                        # Get existing session or create new one
+                        existing_session = self.db_manager.get_chat_session(session_id)
+                        if existing_session:
+                            # Update existing session
+                            messages = existing_session.get('messages', [])
+                            messages.extend([user_message.dict(), assistant_message.dict()])
+                            self.db_manager.save_chat_session({
+                                'id': session_id,
+                                'agent_id': agent_id,
+                                'messages': messages
+                            })
+                        else:
+                            # Create new session
+                            self.db_manager.save_chat_session({
+                                'id': session_id,
+                                'agent_id': agent_id,
+                                'messages': [user_message.dict(), assistant_message.dict()]
+                            })
+                    except Exception as e:
+                        print(f"Failed to save session to database: {e}")
             
             return AgentExecutionResult(
                 success=True,

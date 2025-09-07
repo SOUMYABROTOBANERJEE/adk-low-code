@@ -63,7 +63,8 @@ class GoogleADKAgentConfig:
         self.description = description or ""
         self.tools = tools or []
         self.temperature = temperature
-        self.api_key = api_key or os.getenv('GOOGLE_API_KEY')
+        # Service account authentication is handled via GOOGLE_APPLICATION_CREDENTIALS
+        # No API key needed when using service account
 
 class GoogleADKIntegration:
     """Main integration class for Google ADK."""

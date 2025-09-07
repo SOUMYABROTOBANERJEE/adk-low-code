@@ -4,11 +4,10 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent / 'custom_too
 from google.generativeai import GenerativeModel, configure
 from google.generativeai import types
 
-# Configure Google GenAI
-api_key = os.getenv('GOOGLE_API_KEY')
-if not api_key:
-    raise ValueError("GOOGLE_API_KEY environment variable not set")
-configure(api_key=api_key)
+# Configure Google GenAI with service account authentication
+# Service account authentication is handled via GOOGLE_APPLICATION_CREDENTIALS
+# No API key needed when using service account
+configure()
 
 # Simple Google GenAI Agent implementation
 class GoogleGenAIAgent:
