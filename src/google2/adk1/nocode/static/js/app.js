@@ -603,7 +603,9 @@ class AgentGeniePlatform {
         if (modal) {
             // Show modal immediately
             modal.classList.remove('hidden');
+            modal.classList.add('flex');
             modal.style.display = 'flex';
+            modal.style.visibility = 'visible';
             
             if (loading) {
                 loading.classList.remove('hidden');
@@ -656,9 +658,16 @@ class AgentGeniePlatform {
     }
     
     closeUsageAnalytics() {
+        console.log('Closing usage analytics modal...');
         const modal = document.getElementById('usageAnalyticsModal');
         if (modal) {
             modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.style.display = 'none';
+            modal.style.visibility = 'hidden';
+            console.log('Modal closed successfully');
+        } else {
+            console.error('Usage analytics modal not found');
         }
     }
     
