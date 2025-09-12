@@ -136,6 +136,15 @@ class AgentGeniePlatform {
         // Notifications
         document.getElementById('notificationsBtn')?.addEventListener('click', () => this.handleNotifications());
         
+        // User dropdown functionality
+        document.getElementById('userMenuBtn')?.addEventListener('click', (e) => this.toggleUserDropdown(e));
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => this.closeUserDropdown(e));
+        
+        // Logo click functionality
+        document.querySelector('.logo-container')?.addEventListener('click', () => this.handleLogoClick());
+        
         // Logout
         document.getElementById('logoutBtn')?.addEventListener('click', () => this.logout());
     }
@@ -409,6 +418,490 @@ class AgentGeniePlatform {
                 userAvatar.textContent = displayName.charAt(0).toUpperCase();
             }
         }
+        
+        // Update profile dropdown
+        this.updateProfileDropdown();
+    }
+    
+    updateProfileDropdown() {
+        const userEmail = localStorage.getItem('userEmail');
+        const userName = localStorage.getItem('userName');
+        
+        if (userEmail) {
+            // Update profile info
+            const profileName = document.getElementById('profileName');
+            const profileEmail = document.getElementById('profileEmail');
+            const profileAvatar = document.getElementById('profileAvatar');
+            
+            if (profileName) {
+                profileName.textContent = userName || userEmail.split('@')[0];
+            }
+            if (profileEmail) {
+                profileEmail.textContent = userEmail;
+            }
+            if (profileAvatar) {
+                const initial = (userName || userEmail).charAt(0).toUpperCase();
+                profileAvatar.textContent = initial;
+            }
+        }
+        
+        // Update usage statistics
+        this.updateUsageStatistics();
+        
+        // Update recent agents
+        this.updateRecentAgents();
+    }
+    
+    async updateUsageStatistics() {
+        try {
+            // Get comprehensive usage statistics from the new API
+            const response = await fetch('/api/usage/statistics');
+            const data = await response.json();
+            
+            if (data.success) {
+                const stats = data.statistics;
+                
+                // Update the display with real data from Firestore
+                document.getElementById('totalAgents').textContent = stats.total_agents;
+                document.getElementById('totalTools').textContent = stats.total_tools;
+                document.getElementById('totalProjects').textContent = stats.total_projects;
+                document.getElementById('totalChats').textContent = stats.total_chat_sessions;
+                
+                // Update token consumption display
+                this.updateTokenConsumption(stats.agent_token_usage, stats.total_tokens);
+            } else {
+                // Fallback to individual API calls if the new endpoint fails
+                await this.updateUsageStatisticsFallback();
+            }
+        } catch (error) {
+            console.error('Error updating usage statistics:', error);
+            // Fallback to individual API calls
+            await this.updateUsageStatisticsFallback();
+        }
+    }
+    
+    async updateUsageStatisticsFallback() {
+        try {
+            // Get agents count
+            const agentsResponse = await fetch('/api/agents');
+            const agentsData = await agentsResponse.json();
+            const agentsCount = agentsData.agents ? agentsData.agents.length : 0;
+            
+            // Get tools count
+            const toolsResponse = await fetch('/api/tools');
+            const toolsData = await toolsResponse.json();
+            const toolsCount = toolsData.tools ? toolsData.tools.length : 0;
+            
+            // Get projects count
+            const projectsResponse = await fetch('/api/projects');
+            const projectsData = await projectsResponse.json();
+            const projectsCount = projectsData.projects ? projectsData.projects.length : 0;
+            
+            // Update the display
+            document.getElementById('totalAgents').textContent = agentsCount;
+            document.getElementById('totalTools').textContent = toolsCount;
+            document.getElementById('totalProjects').textContent = projectsCount;
+            document.getElementById('totalChats').textContent = '0'; // Placeholder for now
+        } catch (error) {
+            console.error('Error updating usage statistics fallback:', error);
+        }
+    }
+    
+    updateTokenConsumption(agentTokenUsage, totalTokens) {
+        // Find or create token consumption section
+        let tokenSection = document.getElementById('tokenConsumption');
+        if (!tokenSection) {
+            // Create token consumption section if it doesn't exist
+            const usageSection = document.querySelector('#userDropdown .space-y-4');
+            if (usageSection) {
+                const tokenHtml = `
+                    <div id="tokenConsumption" class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-sm font-medium text-gray-900">Token Usage</h4>
+                            <span class="text-xs text-gray-600">${totalTokens.toLocaleString()} total</span>
+                        </div>
+                        <div id="topAgentsTokens" class="space-y-1">
+                            <!-- Top agents by token usage will be populated here -->
+                        </div>
+                    </div>
+                `;
+                usageSection.insertAdjacentHTML('beforeend', tokenHtml);
+                tokenSection = document.getElementById('tokenConsumption');
+            }
+        }
+        
+        if (tokenSection && agentTokenUsage.length > 0) {
+            const topAgentsContainer = document.getElementById('topAgentsTokens');
+            if (topAgentsContainer) {
+                const topAgents = agentTokenUsage.slice(0, 3); // Show top 3 agents
+                topAgentsContainer.innerHTML = topAgents.map(agent => `
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-gray-700 truncate">${agent.agent_name}</span>
+                        <span class="text-gray-600 font-medium">${agent.total_tokens.toLocaleString()}</span>
+                    </div>
+                `).join('');
+            }
+        }
+    }
+    
+    async updateRecentAgents() {
+        try {
+            // Try to get recent agents from the new usage statistics API first
+            const statsResponse = await fetch('/api/usage/statistics');
+            const statsData = await statsResponse.json();
+            
+            let recentAgents = [];
+            if (statsData.success && statsData.statistics.recent_agents) {
+                recentAgents = statsData.statistics.recent_agents;
+            } else {
+                // Fallback to the old API
+                const response = await fetch('/api/agents');
+                const data = await response.json();
+                recentAgents = data.agents || [];
+            }
+            
+            const recentAgentsList = document.getElementById('recentAgentsList');
+            if (recentAgentsList) {
+                if (recentAgents.length === 0) {
+                    recentAgentsList.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">No agents created yet</div>';
+                } else {
+                    // Show up to 5 recent agents with more details
+                    const displayAgents = recentAgents.slice(0, 5);
+                    recentAgentsList.innerHTML = displayAgents.map(agent => {
+                        const statusColor = agent.is_enabled ? 'bg-green-500' : 'bg-gray-400';
+                        const createdDate = agent.created_at ? new Date(agent.created_at).toLocaleDateString() : 'Unknown';
+                        
+                        return `
+                            <div class="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer transition-colors" onclick="platform.showSection('agents')">
+                                <div class="w-2 h-2 ${statusColor} rounded-full flex-shrink-0"></div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs text-gray-700 truncate font-medium">${agent.name}</div>
+                                    <div class="text-xs text-gray-500">${createdDate}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        } catch (error) {
+            console.error('Error updating recent agents:', error);
+            const recentAgentsList = document.getElementById('recentAgentsList');
+            if (recentAgentsList) {
+                recentAgentsList.innerHTML = '<div class="text-xs text-red-500 text-center py-2">Failed to load agents</div>';
+            }
+        }
+    }
+    
+    async showUsageAnalytics() {
+        console.log('Opening usage analytics modal...');
+        const modal = document.getElementById('usageAnalyticsModal');
+        const loading = document.getElementById('analyticsLoading');
+        const content = document.getElementById('analyticsContent');
+        
+        console.log('Modal elements found:', { modal: !!modal, loading: !!loading, content: !!content });
+        
+        if (modal) {
+            // Show modal immediately
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            
+            if (loading) {
+                loading.classList.remove('hidden');
+                loading.style.display = 'block';
+            }
+            if (content) {
+                content.classList.add('hidden');
+                content.style.display = 'none';
+            }
+            
+            try {
+                console.log('Fetching usage statistics...');
+                // Fetch usage statistics
+                const response = await fetch('/api/usage/statistics');
+                const data = await response.json();
+                
+                console.log('Received analytics data:', data);
+                
+                if (data.success) {
+                    this.populateAnalyticsModal(data.statistics);
+                    if (loading) {
+                        loading.classList.add('hidden');
+                        loading.style.display = 'none';
+                    }
+                    if (content) {
+                        content.classList.remove('hidden');
+                        content.style.display = 'block';
+                    }
+                } else {
+                    throw new Error('Failed to fetch analytics data');
+                }
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                if (loading) {
+                    loading.innerHTML = `
+                        <div class="text-center py-8">
+                            <i class="fas fa-exclamation-triangle text-2xl text-red-500 mb-4"></i>
+                            <p class="text-red-600">Failed to load analytics data</p>
+                            <button onclick="app.showUsageAnalytics()" class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
+                                Try Again
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+        } else {
+            console.error('Usage analytics modal not found');
+            this.showMessage('Usage Analytics modal not found. Please refresh the page.', 'error');
+        }
+    }
+    
+    closeUsageAnalytics() {
+        const modal = document.getElementById('usageAnalyticsModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+    
+    showProfileSettings() {
+        console.log('Opening profile settings...');
+        // For now, show a simple alert. In production, this would open a settings modal
+        this.showMessage('Profile Settings - Coming Soon!', 'info');
+    }
+    
+    showHelpSupport() {
+        console.log('Opening help & support...');
+        // Create and show help accordion modal
+        this.createHelpSupportModal();
+    }
+    
+    createHelpSupportModal() {
+        // Remove existing modal if any
+        const existingModal = document.getElementById('helpSupportModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        const modalHtml = `
+            <div id="helpSupportModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+                    <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                        <h2 class="text-2xl font-bold text-gray-900">Help & Support</h2>
+                        <button onclick="app.closeHelpSupport()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
+                        <div class="space-y-4">
+                            <!-- FAQ Accordion -->
+                            <div class="space-y-2">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Frequently Asked Questions</h3>
+                                
+                                <div class="border border-gray-200 rounded-lg">
+                                    <button onclick="app.toggleAccordion('faq1')" class="w-full px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between">
+                                        <span class="font-medium">How do I create a new agent?</span>
+                                        <i id="faq1-icon" class="fas fa-chevron-down transition-transform"></i>
+                                    </button>
+                                    <div id="faq1-content" class="hidden px-4 py-3 border-t border-gray-200">
+                                        <p class="text-gray-700">To create a new agent, click on the "Create Agent" button on the dashboard, fill in the agent details, and click "Create Agent". You can also add tools to your agent during creation.</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="border border-gray-200 rounded-lg">
+                                    <button onclick="app.toggleAccordion('faq2')" class="w-full px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between">
+                                        <span class="font-medium">How do I add tools to my agent?</span>
+                                        <i id="faq2-icon" class="fas fa-chevron-down transition-transform"></i>
+                                    </button>
+                                    <div id="faq2-content" class="hidden px-4 py-3 border-t border-gray-200">
+                                        <p class="text-gray-700">You can add tools to your agent by selecting them in the "Tools" section when creating or editing an agent. Tools provide additional functionality like calculations, API calls, or custom functions.</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="border border-gray-200 rounded-lg">
+                                    <button onclick="app.toggleAccordion('faq3')" class="w-full px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between">
+                                        <span class="font-medium">How do I embed an agent on my website?</span>
+                                        <i id="faq3-icon" class="fas fa-chevron-down transition-transform"></i>
+                                    </button>
+                                    <div id="faq3-content" class="hidden px-4 py-3 border-t border-gray-200">
+                                        <p class="text-gray-700">To embed an agent, first create and save your agent, then click "Create Embed" in the agent form. Copy the generated embed code and paste it into your website's HTML.</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="border border-gray-200 rounded-lg">
+                                    <button onclick="app.toggleAccordion('faq4')" class="w-full px-4 py-3 text-left bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between">
+                                        <span class="font-medium">What is token usage?</span>
+                                        <i id="faq4-icon" class="fas fa-chevron-down transition-transform"></i>
+                                    </button>
+                                    <div id="faq4-content" class="hidden px-4 py-3 border-t border-gray-200">
+                                        <p class="text-gray-700">Token usage refers to the computational units consumed when your agents process requests. Each message and response consumes tokens, and you can track usage in the Usage Analytics section.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Contact Support -->
+                            <div class="mt-8 p-4 bg-blue-50 rounded-lg">
+                                <h4 class="font-semibold text-blue-900 mb-2">Need More Help?</h4>
+                                <p class="text-blue-800 mb-3">If you can't find the answer to your question, please contact our support team:</p>
+                                <div class="space-y-2">
+                                    <p class="text-blue-700"><i class="fas fa-envelope mr-2"></i>Email: tsl.ai@tatasteel.com</p>
+                                    <p class="text-blue-700"><i class="fas fa-phone mr-2"></i>Phone: +91-XXX-XXXX-XXX</p>
+                                    <p class="text-blue-700"><i class="fas fa-clock mr-2"></i>Support Hours: Mon-Fri 9AM-6PM IST</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+    
+    closeHelpSupport() {
+        const modal = document.getElementById('helpSupportModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+    
+    toggleAccordion(faqId) {
+        const content = document.getElementById(faqId + '-content');
+        const icon = document.getElementById(faqId + '-icon');
+        
+        if (content && icon) {
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            } else {
+                content.classList.add('hidden');
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        }
+    }
+    
+    populateAnalyticsModal(stats) {
+        console.log('Populating analytics modal with data:', stats);
+        
+        // Update overview cards
+        const totalAgentsEl = document.getElementById('analyticsTotalAgents');
+        const totalToolsEl = document.getElementById('analyticsTotalTools');
+        const totalChatsEl = document.getElementById('analyticsTotalChats');
+        const totalTokensEl = document.getElementById('analyticsTotalTokens');
+        
+        if (totalAgentsEl) totalAgentsEl.textContent = stats.total_agents || 0;
+        if (totalToolsEl) totalToolsEl.textContent = stats.total_tools || 0;
+        if (totalChatsEl) totalChatsEl.textContent = stats.total_chat_sessions || 0;
+        if (totalTokensEl) totalTokensEl.textContent = (stats.total_tokens || 0).toLocaleString();
+        
+        // Populate agent token usage chart
+        this.populateAgentTokenChart(stats.agent_token_usage || []);
+        
+        // Populate recent agents
+        this.populateAnalyticsRecentAgents(stats.recent_agents || []);
+    }
+    
+    populateAgentTokenChart(agentTokenUsage) {
+        const chartContainer = document.getElementById('agentTokenChart');
+        if (!chartContainer || !agentTokenUsage.length) {
+            chartContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No token usage data available</p>';
+            return;
+        }
+        
+        const maxTokens = Math.max(...agentTokenUsage.map(agent => agent.total_tokens));
+        
+        chartContainer.innerHTML = agentTokenUsage.map(agent => {
+            const percentage = (agent.total_tokens / maxTokens) * 100;
+            return `
+                <div class="flex items-center space-x-4">
+                    <div class="w-32 text-sm text-gray-700 truncate" title="${agent.agent_name}">
+                        ${agent.agent_name}
+                    </div>
+                    <div class="flex-1 bg-gray-200 rounded-full h-6 relative">
+                        <div class="bg-gradient-to-r from-blue-500 to-purple-500 h-6 rounded-full transition-all duration-1000 ease-out" 
+                             style="width: ${percentage}%"></div>
+                        <div class="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
+                            ${agent.total_tokens.toLocaleString()} tokens
+                        </div>
+                    </div>
+                    <div class="w-20 text-sm text-gray-600 text-right">
+                        ${agent.chat_sessions} sessions
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    populateAnalyticsRecentAgents(recentAgents) {
+        const container = document.getElementById('analyticsRecentAgents');
+        if (!container) return;
+        
+        if (!recentAgents || recentAgents.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-center py-4">No recent agents found</p>';
+            return;
+        }
+        
+        container.innerHTML = recentAgents.map(agent => {
+            const statusColor = agent.is_enabled ? 'bg-green-500' : 'bg-gray-400';
+            const createdDate = agent.created_at ? new Date(agent.created_at).toLocaleDateString() : 'Unknown';
+            
+            return `
+                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div class="w-3 h-3 ${statusColor} rounded-full flex-shrink-0"></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium text-gray-900 truncate">${agent.name}</div>
+                        <div class="text-xs text-gray-500">Created: ${createdDate}</div>
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        ${agent.is_enabled ? 'Active' : 'Inactive'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    toggleUserDropdown(e) {
+        e.stopPropagation();
+        const dropdown = document.getElementById('userDropdown');
+        if (dropdown) {
+            dropdown.classList.toggle('hidden');
+        }
+    }
+    
+    closeUserDropdown(e) {
+        const dropdown = document.getElementById('userDropdown');
+        const userMenuBtn = document.getElementById('userMenuBtn');
+        
+        // If called without event (e.g., from close button), just close the dropdown
+        if (!e) {
+            if (dropdown) {
+                dropdown.classList.add('hidden');
+            }
+            return;
+        }
+        
+        // If called with event, check if click is outside dropdown
+        if (dropdown && userMenuBtn && !userMenuBtn.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    }
+    
+    handleLogoClick() {
+        // Add a special effect when logo is clicked
+        const logoContainer = document.querySelector('.logo-container');
+        if (logoContainer) {
+            logoContainer.style.animation = 'none';
+            setTimeout(() => {
+                logoContainer.style.animation = 'logoPulse 4s ease-in-out infinite';
+            }, 100);
+        }
+        
+        // Navigate to dashboard
+        this.showSection('dashboard');
+        
+        // Show a welcome message
+        this.showMessage('Welcome to Agent Genie! 🚀', 'success');
     }
     
     updateDashboardStats() {
@@ -528,15 +1021,16 @@ class AgentGeniePlatform {
                 const text = statusElement.querySelector('span');
                 
                 if (indicator && text) {
-                    // Remove all existing status classes first
-                    indicator.classList.remove('online', 'offline');
+                    // Clear all status classes first
+                    indicator.className = indicator.className.replace(/online|offline/g, '').trim();
+                    indicator.classList.add('status-indicator');
                 
-                if (data.adk_available) {
+                    if (data.adk_available) {
                         indicator.classList.add('online');
-                    text.textContent = 'ADK Available';
-                } else {
+                        text.textContent = 'ADK Available';
+                    } else {
                         indicator.classList.add('offline');
-                    text.textContent = 'ADK Not Available';
+                        text.textContent = 'ADK Not Available';
                     }
                 }
             }
@@ -548,10 +1042,10 @@ class AgentGeniePlatform {
                 const text = statusElement.querySelector('span');
                 
                 if (indicator && text) {
-                    // Remove all existing status classes first
-                    indicator.classList.remove('online', 'offline');
-                    indicator.classList.add('offline');
-                text.textContent = 'Connection Error';
+                    // Clear all status classes first
+                    indicator.className = indicator.className.replace(/online|offline/g, '').trim();
+                    indicator.classList.add('status-indicator', 'offline');
+                    text.textContent = 'Connection Error';
                 }
             }
         }
@@ -953,7 +1447,10 @@ class AgentGeniePlatform {
         e.preventDefault();
         
         const toolType = document.getElementById('toolType').value;
-        const functionCode = document.getElementById('toolFunctionCode')?.value;
+        // Get function code from CodeMirror editor if available, otherwise from textarea
+        const functionCode = typeof getCodeEditorContent === 'function' ? 
+            getCodeEditorContent() : 
+            document.getElementById('toolFunctionCode')?.value;
         
         // Validate function code is provided for function tools
         if (toolType === 'function' && !functionCode?.trim()) {
@@ -1099,7 +1596,14 @@ class AgentGeniePlatform {
                     ? 'bg-gray-100 text-gray-900' 
                     : 'bg-red-100 text-red-900'
         }`;
-        bubble.textContent = content;
+        
+        // Render markdown for assistant messages, plain text for user messages
+        if (role === 'assistant' && typeof marked !== 'undefined') {
+            bubble.innerHTML = marked.parse(content);
+            bubble.classList.add('chat-message-markdown');
+        } else {
+            bubble.textContent = content;
+        }
         
         messageDiv.appendChild(bubble);
         container.appendChild(messageDiv);
@@ -2015,11 +2519,16 @@ class AgentGeniePlatform {
             
             const data = await response.json();
             if (data.success) {
-                const codeField = document.getElementById('toolFunctionCode');
-                if (codeField) {
-                    codeField.value = data.suggestion;
-                    this.showMessage('Python code generated successfully!', 'success');
+                // Update CodeMirror editor if available, otherwise fallback to textarea
+                if (typeof updateCodeEditor === 'function') {
+                    updateCodeEditor(data.suggestion);
+                } else {
+                    const codeField = document.getElementById('toolFunctionCode');
+                    if (codeField) {
+                        codeField.value = data.suggestion;
+                    }
                 }
+                this.showMessage('Python code generated successfully!', 'success');
             } else {
                 this.showMessage('Failed to generate Python code', 'error');
             }
@@ -2470,20 +2979,85 @@ class AgentGeniePlatform {
         window.open(fullUrl, '_blank', 'width=800,height=600');
     }
     
+    async createAgentEmbed() {
+        try {
+            // Get the current agent ID from the form
+            const agentId = document.getElementById('agentId')?.value;
+            const agentName = document.getElementById('agentName')?.value;
+            
+            if (!agentId || !agentName) {
+                this.showMessage('Please save the agent first before creating an embed', 'warning');
+                return;
+            }
+            
+            // Show loading state
+            const createEmbedBtn = document.getElementById('createEmbedBtn');
+            const originalText = createEmbedBtn.innerHTML;
+            createEmbedBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Creating...';
+            createEmbedBtn.disabled = true;
+            
+            // Call the API to create embed
+            const response = await fetch(`/api/agents/${agentId}/embed`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Show the embed code container
+                const embedCodeContainer = document.getElementById('embedCodeContainer');
+                const embedCode = document.getElementById('embedCode');
+                
+                if (embedCodeContainer && embedCode) {
+                    embedCodeContainer.classList.remove('hidden');
+                    
+                    // Generate the embed code
+                    const embedHtml = this.generateEmbedCode(agentName, data.embed_url);
+                    embedCode.value = embedHtml;
+                    
+                    this.showMessage('Embed created successfully!', 'success');
+                }
+            } else {
+                this.showMessage(data.detail || 'Failed to create embed', 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error creating embed:', error);
+            this.showMessage('Failed to create embed: ' + error.message, 'error');
+        } finally {
+            // Restore button state
+            const createEmbedBtn = document.getElementById('createEmbedBtn');
+            if (createEmbedBtn) {
+                createEmbedBtn.innerHTML = '<i class="fas fa-code mr-1"></i>Create Embed';
+                createEmbedBtn.disabled = false;
+            }
+        }
+    }
+    
+    generateEmbedCode(agentName, embedUrl) {
+        const fullUrl = window.location.origin + embedUrl;
+        return `<!-- ${agentName} Agent Embed Code -->
+<div id="adk-agent-embed" style="width: 100%; max-width: 600px; margin: 0 auto;">
+    <iframe 
+        src="${fullUrl}" 
+        width="100%" 
+        height="600" 
+        frameborder="0" 
+        scrolling="no"
+        style="border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+    </iframe>
+</div>`;
+    }
+    
     bindEmbedEvents() {
         // Create embed button
         const createEmbedBtn = document.getElementById('createEmbedBtn');
         if (createEmbedBtn) {
             createEmbedBtn.addEventListener('click', () => {
-                // Get current agent ID from the form or create a temporary one
-                const agentName = document.getElementById('agentName')?.value;
-                if (agentName) {
-                    // For now, create embed with a temporary ID
-                    // In a real implementation, you'd want to save the agent first
-                    this.showMessage('Please save the agent first, then create an embed', 'info');
-                } else {
-                    this.showMessage('Please fill in the agent details first', 'info');
-                }
+                this.createAgentEmbed();
             });
         }
         
@@ -2640,19 +3214,6 @@ class AgentGeniePlatform {
         container.innerHTML = html;
     }
     
-    generateEmbedCode(agentName, embedUrl) {
-        return `<!-- ${agentName} Agent Embed Code -->
-<div id="adk-agent-embed" style="width: 100%; max-width: 600px; margin: 0 auto;">
-    <iframe 
-        src="${embedUrl}" 
-        width="100%" 
-        height="600" 
-        frameborder="0" 
-        scrolling="no"
-        style="border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-    </iframe>
-</div>`;
-    }
     
     clearEmbedsList() {
         const container = document.getElementById('embedsList');

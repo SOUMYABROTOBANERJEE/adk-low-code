@@ -441,6 +441,10 @@ class ADKService:
             return None
             
         try:
+            print(f"Creating LLM agent: {config.name}")
+            print(f"Available tools: {list(self.tools.keys())}")
+            print(f"Requested tools: {config.tools}")
+            
             # Create the model with service account authentication
             model = Gemini(
                 model=config.model_settings.get("model", "gemini-2.0-flash"),
@@ -457,14 +461,21 @@ class ADKService:
             
             # Add tools if any
             if config.tools:
+                print(f"Adding tools to agent: {config.tools}")
                 for tool_id in config.tools:
                     if tool_id in self.tools:
+                        print(f"Adding tool {tool_id} to agent")
                         agent.tools.append(self.tools[tool_id])
+                    else:
+                        print(f"Warning: Tool {tool_id} not found in registered tools")
             
+            print(f"Successfully created agent: {config.name}")
             return agent
             
         except Exception as exc:
             print(f"Error creating LLM agent {config.name}: {exc}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def create_agent(self, config: AgentConfiguration) -> Optional[Any]:
@@ -509,13 +520,22 @@ class ADKService:
     def register_agent(self, config: AgentConfiguration) -> bool:
         """Register an agent in the service"""
         try:
+            print(f"Registering agent: {config.name} (ID: {config.id})")
+            print(f"ADK available: {ADK_AVAILABLE}")
+            print(f"Agent type: {config.agent_type}")
+            
             agent = self.create_agent(config)
             if agent:
                 self.agents[config.id] = agent
+                print(f"Successfully registered agent: {config.name}")
                 return True
-            return False
+            else:
+                print(f"Failed to create agent: {config.name}")
+                return False
         except Exception as exc:
             print(f"Error registering agent {config.name}: {exc}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def execute_agent(self, agent_id: str, prompt: str, session_id: Optional[str] = None, user_id: Optional[str] = None) -> AgentExecutionResult:

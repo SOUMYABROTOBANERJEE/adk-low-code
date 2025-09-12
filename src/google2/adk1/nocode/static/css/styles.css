@@ -1,5 +1,92 @@
 /* Agent Genie - Tata Steel AI Platform Styles */
 
+/* CodeMirror Editor Styles */
+.CodeMirror {
+    height: auto !important;
+    min-height: 200px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+.CodeMirror-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.CodeMirror-sizer {
+    padding-left: 3em !important;
+}
+
+.CodeMirror-focused {
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.CodeMirror-gutters {
+    background-color: #f9fafb;
+    border-right: 1px solid #e5e7eb;
+    min-width: 3em;
+    width: 3em;
+}
+
+.CodeMirror-linenumber {
+    color: #6b7280;
+    padding: 0 8px;
+    text-align: right;
+    min-width: 2em;
+    width: 2em;
+    display: inline-block;
+    position: relative;
+    z-index: 1;
+}
+
+.CodeMirror-lines {
+    padding-left: 0.5em;
+}
+
+.CodeMirror-cursor {
+    border-left: 2px solid #4A90E2;
+}
+
+.CodeMirror-selected {
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+.CodeMirror-matchingbracket {
+    background-color: rgba(74, 144, 226, 0.2);
+    border-radius: 2px;
+}
+
+.CodeMirror-nonmatchingbracket {
+    background-color: rgba(239, 68, 68, 0.2);
+    border-radius: 2px;
+}
+
+/* CodeMirror Theme Overrides */
+.CodeMirror.cm-s-monokai {
+    background-color: #272822;
+    color: #f8f8f2;
+}
+
+.CodeMirror.cm-s-material {
+    background-color: #263238;
+    color: #eeffff;
+}
+
+.CodeMirror.cm-s-solarized {
+    background-color: #002b36;
+    color: #839496;
+}
+
+.CodeMirror.cm-s-tomorrow-night-eighties {
+    background-color: #2d2d2d;
+    color: #cccccc;
+}
+
 /* Base Layout Improvements */
 * {
     box-sizing: border-box;
@@ -78,11 +165,119 @@ body {
 /* Logo and Brand */
 .logo-tata-steel {
     flex-shrink: 0;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    border-radius: 8px;
+    padding: 4px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    backdrop-filter: blur(10px);
+}
+
+/* Logo Container Effects */
+.logo-container {
+    position: relative;
+    cursor: pointer;
+    animation: logoPulse 4s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+.logo-glow {
+    background: linear-gradient(45deg, #4A90E2, #7B68EE, #00D4AA);
+    filter: blur(8px);
+    z-index: -1;
+    animation: logoGlow 2s ease-in-out infinite alternate;
+}
+
+.logo-shine {
+    background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.3) 50%, transparent 70%);
+    z-index: 1;
+    animation: logoShine 3s ease-in-out infinite;
+}
+
+@keyframes logoGlow {
+    0% {
+        transform: scale(1);
+        opacity: 0.3;
+    }
+    100% {
+        transform: scale(1.1);
+        opacity: 0.6;
+    }
+}
+
+@keyframes logoShine {
+    0% {
+        transform: translateX(-100%);
+    }
+    50% {
+        transform: translateX(100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Logo hover effects */
+.logo-container:hover .logo-tata-steel {
+    filter: drop-shadow(0 4px 8px rgba(74, 144, 226, 0.3)) brightness(1.1);
+    transform: scale(1.1) rotate(2deg);
+}
+
+.logo-container:hover .logo-glow {
+    animation-duration: 1s;
+}
+
+.logo-container:hover .logo-shine {
+    animation-duration: 1.5s;
+}
+
+/* Logo click effect */
+.logo-container:active .logo-tata-steel {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+}
+
+/* Logo focus state for accessibility */
+.logo-container:focus {
+    outline: 2px solid #4A90E2;
+    outline-offset: 2px;
+    border-radius: 4px;
 }
 
 /* User Menu */
 #userDisplayName {
     max-width: 6rem;
+}
+
+/* User Dropdown */
+#userDropdown {
+    animation: fadeInDown 0.2s ease-out;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#userDropdown .hover\:bg-gray-100:hover {
+    background-color: #f9fafb;
+}
+
+#userDropdown .hover\:bg-red-50:hover {
+    background-color: #fef2f2;
 }
 
 /* Modal Animations */
@@ -214,4 +409,82 @@ body {
     .space-x-4 > * + * {
         margin-left: 0.5rem;
     }
+}
+
+/* Markdown styles for chat messages */
+.chat-message-markdown {
+    line-height: 1.6;
+}
+
+.chat-message-markdown h1,
+.chat-message-markdown h2,
+.chat-message-markdown h3,
+.chat-message-markdown h4,
+.chat-message-markdown h5,
+.chat-message-markdown h6 {
+    font-weight: bold;
+    margin: 0.5em 0 0.25em 0;
+}
+
+.chat-message-markdown h1 { font-size: 1.25em; }
+.chat-message-markdown h2 { font-size: 1.125em; }
+.chat-message-markdown h3 { font-size: 1em; }
+
+.chat-message-markdown p {
+    margin: 0.5em 0;
+}
+
+.chat-message-markdown ul,
+.chat-message-markdown ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+.chat-message-markdown li {
+    margin: 0.25em 0;
+}
+
+.chat-message-markdown code {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.125em 0.25em;
+    border-radius: 0.25em;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875em;
+}
+
+.chat-message-markdown pre {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.5em;
+    border-radius: 0.375em;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.chat-message-markdown pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.chat-message-markdown blockquote {
+    border-left: 3px solid rgba(0, 0, 0, 0.2);
+    padding-left: 0.75em;
+    margin: 0.5em 0;
+    font-style: italic;
+}
+
+.chat-message-markdown strong {
+    font-weight: bold;
+}
+
+.chat-message-markdown em {
+    font-style: italic;
+}
+
+.chat-message-markdown a {
+    color: #4A90E2;
+    text-decoration: underline;
+}
+
+.chat-message-markdown a:hover {
+    color: #357ABD;
 }

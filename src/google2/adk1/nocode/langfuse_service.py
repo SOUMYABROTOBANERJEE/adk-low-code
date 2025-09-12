@@ -64,7 +64,7 @@ class LangfuseService:
             }
             
             # Use the new Langfuse API with enhanced features
-            trace = self.langfuse.trace(
+            trace = self.langfuse.create_trace(
                 id=trace_id,
                 name=name,
                 user_id=user_id,

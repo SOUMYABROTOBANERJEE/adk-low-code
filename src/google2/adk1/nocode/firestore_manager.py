@@ -574,3 +574,116 @@ class FirestoreManager:
         except Exception as e:
             logger.error(f"Error initializing collections: {e}")
             raise
+    
+    def save_agent_embed(self, embed_data: Dict[str, Any]) -> bool:
+        """Save agent embed configuration to Firestore"""
+        try:
+            embed_id = embed_data.get('embed_id')
+            if not embed_id:
+                logger.error("Embed ID is required")
+                return False
+            
+            # Store in agent_embeds subcollection
+            embed_ref = self.collection.document('agent_embeds').collection('items').document(embed_id)
+            embed_ref.set(embed_data)
+            
+            logger.info(f"Saved agent embed: {embed_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving agent embed: {e}")
+            return False
+    
+    def get_agent_embed(self, embed_id: str) -> Optional[Dict[str, Any]]:
+        """Get agent embed configuration from Firestore"""
+        try:
+            embed_ref = self.collection.document('agent_embeds').collection('items').document(embed_id)
+            doc = embed_ref.get()
+            
+            if doc.exists:
+                embed_data = doc.to_dict()
+                embed_data['id'] = doc.id
+                return embed_data
+            else:
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting agent embed: {e}")
+            return None
+    
+    def get_agent_embeds(self, agent_id: str) -> List[Dict[str, Any]]:
+        """Get all embeds for an agent from Firestore"""
+        try:
+            embeds_ref = self.collection.document('agent_embeds').collection('items')
+            docs = embeds_ref.where('agent_id', '==', agent_id).order_by('created_at', direction='DESCENDING').stream()
+            
+            embeds = []
+            for doc in docs:
+                embed_data = doc.to_dict()
+                embed_data['id'] = doc.id
+                embeds.append(embed_data)
+            
+            return embeds
+            
+        except Exception as e:
+            logger.error(f"Error getting agent embeds: {e}")
+            return []
+    
+    def update_embed_access(self, embed_id: str) -> bool:
+        """Update embed access statistics in Firestore"""
+        try:
+            embed_ref = self.collection.document('agent_embeds').collection('items').document(embed_id)
+            
+            # Use Firestore transaction for atomic update
+            @firestore.transactional
+            def update_access(transaction):
+                doc = embed_ref.get(transaction=transaction)
+                if doc.exists:
+                    current_data = doc.to_dict()
+                    access_count = current_data.get('access_count', 0) + 1
+                    
+                    transaction.update(embed_ref, {
+                        'access_count': access_count,
+                        'last_accessed': datetime.now().isoformat()
+                    })
+                    return True
+                return False
+            
+            # Create transaction and execute
+            transaction = self.db.transaction()
+            return update_access(transaction)
+            
+        except Exception as e:
+            logger.error(f"Error updating embed access: {e}")
+            return False
+    
+    def delete_agent_embed(self, embed_id: str) -> bool:
+        """Delete an agent embed from Firestore"""
+        try:
+            embed_ref = self.collection.document('agent_embeds').collection('items').document(embed_id)
+            embed_ref.delete()
+            
+            logger.info(f"Deleted agent embed: {embed_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting agent embed: {e}")
+            return False
+    
+    def get_all_chat_sessions(self) -> List[Dict[str, Any]]:
+        """Get all chat sessions from Firestore"""
+        try:
+            sessions_ref = self.collection.document('chat_sessions').collection('items')
+            docs = sessions_ref.stream()
+            
+            sessions = []
+            for doc in docs:
+                session_data = doc.to_dict()
+                session_data['id'] = doc.id
+                sessions.append(session_data)
+            
+            return sessions
+            
+        except Exception as e:
+            logger.error(f"Error getting all chat sessions: {e}")
+            return []

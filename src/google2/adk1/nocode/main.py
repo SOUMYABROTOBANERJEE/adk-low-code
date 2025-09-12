@@ -652,10 +652,19 @@ async def create_agent(agent_request: AgentCreateRequest):
                 )
                 sub_agents.append(sub_agent)
         
+        # Convert agent name to valid identifier for ADK
+        # ADK requires agent names to be valid identifiers (no spaces, special chars)
+        valid_agent_name = agent_request.name.strip().replace(' ', '_').replace('-', '_')
+        # Remove any other special characters and ensure it starts with letter/underscore
+        import re
+        valid_agent_name = re.sub(r'[^a-zA-Z0-9_]', '_', valid_agent_name)
+        if valid_agent_name and not valid_agent_name[0].isalpha() and valid_agent_name[0] != '_':
+            valid_agent_name = 'agent_' + valid_agent_name
+        
         # Create the main agent configuration
         agent = AgentConfiguration(
             id=agent_id,
-            name=agent_request.name.strip(),
+            name=valid_agent_name,  # Use valid identifier for ADK
             description=agent_request.description.strip(),
             agent_type=agent_request.agent_type,
             system_prompt=agent_request.system_prompt,
@@ -2905,6 +2914,134 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
         except:
             pass
         await websocket.close()
+
+
+# Usage Statistics and Analytics Endpoints
+@app.get("/api/usage/statistics")
+async def get_usage_statistics():
+    """Get comprehensive usage statistics from Firestore"""
+    try:
+        # Get basic counts
+        agents = db_manager.get_all_agents()
+        tools = db_manager.get_all_tools()
+        projects = db_manager.get_all_projects()
+        
+        # Get chat sessions count
+        chat_sessions = db_manager.get_all_chat_sessions()
+        
+        # Calculate token consumption by agent
+        agent_token_usage = {}
+        total_tokens = 0
+        
+        for session in chat_sessions:
+            agent_id = session.get('agent_id')
+            if agent_id:
+                # Estimate tokens (rough approximation: 1 token ≈ 4 characters)
+                message_count = len(session.get('messages', []))
+                estimated_tokens = message_count * 50  # Average 50 tokens per message
+                
+                if agent_id not in agent_token_usage:
+                    agent_token_usage[agent_id] = {
+                        'agent_id': agent_id,
+                        'agent_name': 'Unknown Agent',
+                        'total_tokens': 0,
+                        'chat_sessions': 0,
+                        'last_used': None
+                    }
+                
+                agent_token_usage[agent_id]['total_tokens'] += estimated_tokens
+                agent_token_usage[agent_id]['chat_sessions'] += 1
+                agent_token_usage[agent_id]['last_used'] = session.get('created_at')
+                total_tokens += estimated_tokens
+        
+        # Update agent names
+        for agent in agents:
+            agent_id = agent.get('id')
+            if agent_id in agent_token_usage:
+                agent_token_usage[agent_id]['agent_name'] = agent.get('name', 'Unknown Agent')
+        
+        # Sort agents by token usage
+        sorted_agents = sorted(agent_token_usage.values(), key=lambda x: x['total_tokens'], reverse=True)
+        
+        return {
+            "success": True,
+            "statistics": {
+                "total_agents": len(agents),
+                "total_tools": len(tools),
+                "total_projects": len(projects),
+                "total_chat_sessions": len(chat_sessions),
+                "total_tokens": total_tokens,
+                "agent_token_usage": sorted_agents[:10],  # Top 10 agents
+                "recent_agents": [
+                    {
+                        "id": agent.get('id'),
+                        "name": agent.get('name'),
+                        "created_at": agent.get('created_at'),
+                        "is_enabled": agent.get('is_enabled', True)
+                    }
+                    for agent in sorted(agents, key=lambda x: x.get('created_at', ''), reverse=True)[:5]
+                ]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting usage statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get usage statistics: {str(e)}")
+
+
+@app.get("/api/usage/agent/{agent_id}/tokens")
+async def get_agent_token_usage(agent_id: str):
+    """Get detailed token usage for a specific agent"""
+    try:
+        # Get agent info
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Get chat sessions for this agent
+        chat_sessions = db_manager.get_all_chat_sessions()
+        agent_sessions = [s for s in chat_sessions if s.get('agent_id') == agent_id]
+        
+        # Calculate detailed token usage
+        total_tokens = 0
+        total_messages = 0
+        daily_usage = {}
+        
+        for session in agent_sessions:
+            messages = session.get('messages', [])
+            total_messages += len(messages)
+            
+            # Estimate tokens per message
+            session_tokens = len(messages) * 50  # Average 50 tokens per message
+            total_tokens += session_tokens
+            
+            # Group by date
+            created_at = session.get('created_at', '')
+            if created_at:
+                date = created_at.split('T')[0]  # Extract date part
+                daily_usage[date] = daily_usage.get(date, 0) + session_tokens
+        
+        # Sort daily usage
+        sorted_daily_usage = sorted(daily_usage.items(), key=lambda x: x[0], reverse=True)
+        
+        return {
+            "success": True,
+            "agent": {
+                "id": agent_id,
+                "name": agent.get('name'),
+                "total_tokens": total_tokens,
+                "total_sessions": len(agent_sessions),
+                "total_messages": total_messages,
+                "average_tokens_per_session": total_tokens / len(agent_sessions) if agent_sessions else 0,
+                "daily_usage": sorted_daily_usage[:30]  # Last 30 days
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting agent token usage: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get agent token usage: {str(e)}")
 
 
 if __name__ == "__main__":
