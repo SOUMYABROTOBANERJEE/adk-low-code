@@ -29,7 +29,7 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8083,  # Changed from 8082 to 8083
-        log_level="info",
+        port=8080,  # Changed from 8082 to 8083
+        log_level="debug",
         reload=False  # Set to True for development
     )

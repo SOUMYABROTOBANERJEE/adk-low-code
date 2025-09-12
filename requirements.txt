@@ -19,11 +19,11 @@ google-auth-oauthlib>=1.0.0
 google-auth-httplib2>=0.1.0
 
 # Google Cloud Trace dependencies for observability
-opentelemetry-api>=1.20.0
-opentelemetry-sdk>=1.20.0
+opentelemetry-api
+opentelemetry-sdk
 opentelemetry-exporter-cloud-trace
-opentelemetry-instrumentation-fastapi>=0.42b0
-opentelemetry-instrumentation-requests>=0.42b0
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests
 
 # Web framework and UI
 aiofiles>=23.2.1
