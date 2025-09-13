@@ -6,11 +6,17 @@ import asyncio
 import time
 import uuid
 import os
+import logging
+import json
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import tempfile
 import importlib.util
 import traceback
+
+# Set up detailed logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Import Google ADK modules
 try:
@@ -335,11 +341,18 @@ class ADKService:
     
     def create_function_tool(self, tool_def: ToolDefinition) -> Optional[Any]:
         """Create a function tool from tool definition following ADK patterns"""
+        logger.info(f"🔧 Creating function tool: {tool_def.name} (ID: {tool_def.id})")
+        
         if not ADK_AVAILABLE:
+            logger.error("❌ ADK not available for tool creation")
             return None
             
         if tool_def.tool_type != ToolType.FUNCTION or not tool_def.function_code:
+            logger.error(f"❌ Invalid tool definition: type={tool_def.tool_type}, has_code={bool(tool_def.function_code)}")
             return None
+            
+        logger.info(f"📝 Tool function code length: {len(tool_def.function_code)} characters")
+        logger.info(f"📋 Tool function code preview: {tool_def.function_code[:200]}...")
             
         try:
             # Create a proper ADK function tool
@@ -354,24 +367,100 @@ class ADKService:
                 Returns:
                     str: The result of the tool execution
                 """
+                logger.info(f"🛠️ Executing tool '{tool_def.name}' with input: '{input_data[:100]}...'")
                 try:
-                    # Execute the custom function code
-                    # We'll use exec to run the user's code in a safe context
-                    local_vars = {'input_data': input_data}
+                    # Parse and handle import statements properly
+                    logger.info(f"📝 Parsing imports from tool code for '{tool_def.name}'...")
+                    imports_dict = self._extract_imports_from_code(tool_def.function_code)
+                    logger.info(f"📦 Found imports: {list(imports_dict.keys())}")
                     
-                    # Execute the function code
-                    exec(tool_def.function_code, {}, local_vars)
+                    # Create a safe execution context with imports
+                    safe_globals = {
+                        '__builtins__': {
+                            '__import__': __import__,  # Essential for import statements
+                            'print': print,
+                            'len': len,
+                            'str': str,
+                            'int': int,
+                            'float': float,
+                            'bool': bool,
+                            'list': list,
+                            'dict': dict,
+                            'tuple': tuple,
+                            'set': set,
+                            'range': range,
+                            'enumerate': enumerate,
+                            'zip': zip,
+                            'min': min,
+                            'max': max,
+                            'sum': sum,
+                            'abs': abs,
+                            'round': round,
+                            'sorted': sorted,
+                            'reversed': reversed,
+                            'any': any,
+                            'all': all,
+                            'isinstance': isinstance,
+                            'hasattr': hasattr,
+                            'getattr': getattr,
+                            'setattr': setattr,
+                            'type': type,
+                            'open': open,
+                            # Exception classes
+                            'Exception': Exception,
+                            'ValueError': ValueError,
+                            'TypeError': TypeError,
+                            'AttributeError': AttributeError,
+                            'KeyError': KeyError,
+                            'IndexError': IndexError,
+                            'ImportError': ImportError,
+                            'RuntimeError': RuntimeError,
+                            'OSError': OSError,
+                            'IOError': IOError,
+                        },
+                        **imports_dict  # Add all the imported modules
+                    }
+                    
+                    local_vars = {
+                        'input_data': input_data,
+                    }
+                    
+                    logger.info(f"📝 Executing function code for tool '{tool_def.name}'...")
+                    
+                    # Execute the function code with proper globals
+                    # This will execute any top-level imports and function definitions
+                    exec(tool_def.function_code, safe_globals, local_vars)
+                    logger.info(f"✅ Function code executed successfully. Available functions: {list(local_vars.keys())}")
                     
                     # Look for an execute function or main function
                     if 'execute' in local_vars:
-                        return str(local_vars['execute'](input_data))
+                        execute_func = local_vars['execute']
+                        logger.info(f"🎯 Found execute function: {execute_func}")
+                        # Always try with tool_context parameter first
+                        try:
+                            logger.info(f"🔄 Trying execute function with tool_context parameter...")
+                            result = str(execute_func(input_data, None))
+                            logger.info(f"✅ Execute function succeeded with tool_context: {len(result)} characters")
+                            return result
+                        except TypeError as e:
+                            logger.info(f"⚠️ Execute function failed with tool_context, trying without: {e}")
+                            # If that fails, try without tool_context
+                            result = str(execute_func(input_data))
+                            logger.info(f"✅ Execute function succeeded without tool_context: {len(result)} characters")
+                            return result
                     elif 'main' in local_vars:
-                        return str(local_vars['main'](input_data))
+                        logger.info(f"🎯 Found main function: {local_vars['main']}")
+                        result = str(local_vars['main'](input_data))
+                        logger.info(f"✅ Main function succeeded: {len(result)} characters")
+                        return result
                     else:
                         # If no execute function found, return a default response
+                        logger.warning(f"⚠️ No execute or main function found in tool '{tool_def.name}'")
                         return f"Tool {tool_def.name} executed successfully with input: {input_data}"
                         
                 except Exception as exc:
+                    logger.error(f"❌ Error executing tool '{tool_def.name}': {exc}")
+                    logger.error(f"📋 Tool execution error details: {traceback.format_exc()}")
                     return f"Error executing tool {tool_def.name}: {str(exc)}"
             
             # Set the function name and docstring for better identification
@@ -379,35 +468,61 @@ class ADKService:
             tool_function.__doc__ = tool_def.description
             
             # Create a proper ADK FunctionTool
+            logger.info(f"🔧 Creating ADK FunctionTool for '{tool_def.name}'...")
             try:
                 from google.adk.tools import FunctionTool
+                logger.info(f"✅ FunctionTool imported successfully")
                 # Check the correct constructor parameters for FunctionTool
                 try:
                     adk_tool = FunctionTool(
                         function=tool_function,
                         description=tool_def.description
                     )
+                    logger.info(f"✅ ADK FunctionTool created successfully: {type(adk_tool)}")
                     # Wrap the FunctionTool to make it callable
                     def wrapped_tool(input_data: str) -> str:
+                        logger.info(f"🔄 Wrapped tool called for '{tool_def.name}' with input: '{input_data[:50]}...'")
                         try:
                             # Use the FunctionTool's run method if available
                             if hasattr(adk_tool, 'run'):
-                                return str(adk_tool.run(input_data))
+                                logger.info(f"🎯 Using adk_tool.run() method")
+                                result = str(adk_tool.run(input_data))
+                                logger.info(f"✅ adk_tool.run() succeeded: {len(result)} characters")
+                                return result
                             elif hasattr(adk_tool, '__call__'):
-                                return str(adk_tool(input_data))
+                                logger.info(f"🎯 Using adk_tool.__call__() method")
+                                result = str(adk_tool(input_data))
+                                logger.info(f"✅ adk_tool.__call__() succeeded: {len(result)} characters")
+                                return result
                             else:
-                                # Fallback to the original function
-                                return str(tool_function(input_data))
+                                logger.info(f"🎯 Using fallback to original function")
+                                # Fallback to the original function with proper parameters
+                                import inspect
+                                sig = inspect.signature(tool_function)
+                                logger.info(f"📋 Function signature: {sig}")
+                                if len(sig.parameters) >= 2:
+                                    logger.info(f"🔄 Calling with tool_context parameter")
+                                    result = str(tool_function(input_data, None))
+                                else:
+                                    logger.info(f"🔄 Calling without tool_context parameter")
+                                    result = str(tool_function(input_data))
+                                logger.info(f"✅ Fallback function succeeded: {len(result)} characters")
+                                return result
                         except Exception as exc:
+                            logger.error(f"❌ Wrapped tool execution failed: {exc}")
+                            logger.error(f"📋 Wrapped tool error details: {traceback.format_exc()}")
                             return f"Error executing tool {tool_def.name}: {str(exc)}"
                     
                     wrapped_tool.__name__ = tool_def.name.replace(' ', '_').lower()
                     wrapped_tool.__doc__ = tool_def.description
                     return wrapped_tool
-                except TypeError:
+                except TypeError as e:
+                    logger.warning(f"⚠️ FunctionTool creation failed with TypeError: {e}")
                     # If that fails, try with just the function
                     try:
+                        logger.info(f"🔄 Trying FunctionTool with just function parameter...")
                         adk_tool = FunctionTool(tool_function)
+                        logger.info(f"✅ FunctionTool created with function only: {type(adk_tool)}")
                         # Same wrapping logic
                         def wrapped_tool(input_data: str) -> str:
                             try:
@@ -416,27 +531,163 @@ class ADKService:
                                 elif hasattr(adk_tool, '__call__'):
                                     return str(adk_tool(input_data))
                                 else:
-                                    return str(tool_function(input_data))
+                                    # Fallback to the original function with proper parameters
+                                    import inspect
+                                    sig = inspect.signature(tool_function)
+                                    if len(sig.parameters) >= 2:
+                                        return str(tool_function(input_data, None))
+                                    else:
+                                        return str(tool_function(input_data))
                             except Exception as execution_error:
                                 return f"Error executing tool {tool_def.name}: {str(execution_error)}"
                         
                         wrapped_tool.__name__ = tool_def.name.replace(' ', '_').lower()
                         wrapped_tool.__doc__ = tool_def.description
                         return wrapped_tool
-                    except Exception:
+                    except Exception as e2:
+                        logger.error(f"❌ FunctionTool creation failed completely: {e2}")
                         # Fallback to the function if FunctionTool fails
+                        logger.info(f"🔄 Falling back to original function")
                         return tool_function
-            except ImportError:
+            except ImportError as e:
+                logger.error(f"❌ FunctionTool import failed: {e}")
                 # Fallback to the function if FunctionTool is not available
+                logger.info(f"🔄 Falling back to original function")
                 return tool_function
             
         except Exception as exc:
+            logger.error(f"❌ Error creating function tool '{tool_def.name}': {exc}")
+            logger.error(f"📋 Tool creation error details: {traceback.format_exc()}")
             print(f"Error creating function tool {tool_def.name}: {exc}")
             return None
     
+    def _extract_imports_from_code(self, code: str) -> Dict[str, Any]:
+        """
+        Extract import statements from Python code and return a dictionary of imported modules.
+        
+        Args:
+            code: Python code string
+            
+        Returns:
+            Dictionary mapping import names to imported modules
+        """
+        import ast
+        import importlib
+        
+        imports_dict = {}
+        
+        try:
+            # Parse the code into an AST
+            tree = ast.parse(code)
+            
+            # Walk through the AST to find import statements
+            # This will find imports at any level (module level or inside functions)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    # Handle: import module
+                    for alias in node.names:
+                        module_name = alias.name
+                        import_name = alias.asname if alias.asname else module_name.split('.')[0]
+                        
+                        try:
+                            logger.info(f"📦 Importing module: {module_name} as {import_name}")
+                            module = importlib.import_module(module_name)
+                            imports_dict[import_name] = module
+                            logger.info(f"✅ Successfully imported {module_name} as {import_name}")
+                            
+                            # Also add the full module path for nested access
+                            if '.' in module_name:
+                                parts = module_name.split('.')
+                                for i in range(1, len(parts) + 1):
+                                    partial_name = '.'.join(parts[:i])
+                                    try:
+                                        partial_module = importlib.import_module(partial_name)
+                                        imports_dict[partial_name] = partial_module
+                                    except ImportError:
+                                        pass
+                                        
+                        except ImportError as e:
+                            logger.warning(f"⚠️ Failed to import {module_name}: {e}")
+                            # Try to import parent modules if this fails
+                            if '.' in module_name:
+                                parent_module = module_name.rsplit('.', 1)[0]
+                                try:
+                                    logger.info(f"📦 Trying parent module: {parent_module}")
+                                    parent = importlib.import_module(parent_module)
+                                    imports_dict[parent_module] = parent
+                                except ImportError:
+                                    pass
+                            
+                elif isinstance(node, ast.ImportFrom):
+                    # Handle: from module import name
+                    module_name = node.module
+                    if module_name:
+                        try:
+                            logger.info(f"📦 Importing from module: {module_name}")
+                            module = importlib.import_module(module_name)
+                            
+                            for alias in node.names:
+                                import_name = alias.asname if alias.asname else alias.name
+                                
+                                if alias.name == '*':
+                                    # Handle: from module import *
+                                    logger.info(f"📦 Importing all from {module_name}")
+                                    if hasattr(module, '__all__'):
+                                        for name in module.__all__:
+                                            if hasattr(module, name):
+                                                imports_dict[name] = getattr(module, name)
+                                                logger.info(f"✅ Imported {name} from {module_name}")
+                                    else:
+                                        # Import all non-private attributes
+                                        for name in dir(module):
+                                            if not name.startswith('_'):
+                                                imports_dict[name] = getattr(module, name)
+                                                logger.info(f"✅ Imported {name} from {module_name}")
+                                else:
+                                    # Handle: from module import specific_name
+                                    if hasattr(module, alias.name):
+                                        imports_dict[import_name] = getattr(module, alias.name)
+                                        logger.info(f"✅ Imported {alias.name} as {import_name} from {module_name}")
+                                    else:
+                                        logger.warning(f"⚠️ {alias.name} not found in {module_name}")
+                                        # Try to find it in submodules
+                                        for attr_name in dir(module):
+                                            if not attr_name.startswith('_'):
+                                                try:
+                                                    attr = getattr(module, attr_name)
+                                                    if hasattr(attr, alias.name):
+                                                        imports_dict[import_name] = getattr(attr, alias.name)
+                                                        logger.info(f"✅ Found {alias.name} in submodule {attr_name}")
+                                                        break
+                                                except:
+                                                    pass
+                                        
+                        except ImportError as e:
+                            logger.warning(f"⚠️ Failed to import from {module_name}: {e}")
+                            # Try to import parent modules if this fails
+                            if '.' in module_name:
+                                parent_module = module_name.rsplit('.', 1)[0]
+                                try:
+                                    logger.info(f"📦 Trying parent module: {parent_module}")
+                                    parent = importlib.import_module(parent_module)
+                                    imports_dict[parent_module] = parent
+                                except ImportError:
+                                    pass
+                            
+        except SyntaxError as e:
+            logger.warning(f"⚠️ Syntax error in code: {e}")
+            # Don't fallback to hardcoded imports - let it fail cleanly
+            logger.info("📝 Code has syntax errors, no imports will be available")
+                
+        return imports_dict
+    
     def create_llm_agent(self, config: AgentConfiguration) -> Optional[Any]:
         """Create an LLM agent from configuration"""
+        logger.info(f"🤖 Creating LLM agent: {config.name} (ID: {config.id})")
+        logger.info(f"📋 Agent config: type={config.agent_type}, model={config.model_settings.get('model', 'default')}, tools_count={len(config.tools) if config.tools else 0}")
+        
         if not ADK_AVAILABLE:
+            logger.error("❌ ADK not available for agent creation")
             print("ADK not available")
             return None
             
@@ -540,53 +791,80 @@ class ADKService:
     
     async def execute_agent(self, agent_id: str, prompt: str, session_id: Optional[str] = None, user_id: Optional[str] = None) -> AgentExecutionResult:
         """Execute an agent with a given prompt"""
+        logger.info(f"🚀 Starting agent execution - Agent ID: {agent_id}, Prompt: '{prompt[:100]}...', Session: {session_id}, User: {user_id}")
+        
         if not ADK_AVAILABLE:
+            logger.error("❌ Google ADK not available")
             return AgentExecutionResult(
                 success=False,
                 error="Google ADK not available. Please install with: pip install google-adk"
             )
         
         # Check if agent exists in memory or database
+        logger.info(f"🔍 Checking for agent {agent_id} in memory...")
+        logger.info(f"📊 Available agents in memory: {list(self.agents.keys())}")
+        
         if agent_id not in self.agents:
+            logger.info(f"⚠️ Agent {agent_id} not found in memory, checking database...")
             if self.db_manager:
                 # Try to get agent from database
                 agent_data = self.db_manager.get_agent(agent_id)
+                logger.info(f"📋 Agent data from database: {json.dumps(agent_data, indent=2) if agent_data else 'None'}")
+                
                 if agent_data:
                     # Create the agent from database data
+                    logger.info(f"🔧 Creating agent from database data...")
                     agent = self.create_llm_agent(AgentConfiguration(**agent_data))
                     if agent:
                         self.agents[agent_id] = agent
+                        logger.info(f"✅ Successfully created and cached agent {agent_id}")
                     else:
+                        logger.error(f"❌ Failed to create agent {agent_id} from database")
                         return AgentExecutionResult(
                             success=False,
                             error=f"Failed to create agent {agent_id} from database"
                         )
                 else:
+                    logger.error(f"❌ Agent {agent_id} not found in database")
                     return AgentExecutionResult(
                         success=False,
                         error=f"Agent {agent_id} not found in database"
                     )
             else:
+                logger.error(f"❌ Agent {agent_id} not found and no database manager")
                 return AgentExecutionResult(
                     success=False,
                     error=f"Agent {agent_id} not found"
                 )
         else:
             agent = self.agents[agent_id]
+            logger.info(f"✅ Found agent {agent_id} in memory")
         
         start_time = time.time()
         
         # Use provided user_id or default
         effective_user_id = user_id or self.user_id
+        logger.info(f"👤 Using user ID: {effective_user_id}")
         
         try:
             # Create or get session
             if not session_id:
                 session_id = str(uuid.uuid4())
+                logger.info(f"🆔 Generated new session ID: {session_id}")
+            else:
+                logger.info(f"🆔 Using provided session ID: {session_id}")
+            
+            # Log agent details
+            logger.info(f"🤖 Agent details: {type(agent).__name__}")
+            logger.info(f"🔧 Agent tools: {getattr(agent, 'tools', 'No tools')}")
             
             # Use traced runner if available, otherwise fall back to regular runner
             if self.traced_runner:
+                logger.info(f"📊 Using traced runner for execution...")
                 # Execute with Cloud Trace integration
+                logger.info(f"📊 Executing with traced runner...")
+                logger.info(f"📝 Additional context: prompt_length={len(prompt)}, agent_type={getattr(agent, 'agent_type', 'unknown')}, model={getattr(agent, 'model', getattr(agent, 'model_name', 'unknown'))}")
+                
                 trace_result = await self.traced_runner.run_agent_with_trace(
                     agent=agent,
                     user_id=effective_user_id,
@@ -596,60 +874,85 @@ class ADKService:
                     additional_context={
                         "prompt_length": len(prompt),
                         "agent_type": getattr(agent, 'agent_type', 'unknown'),
-                        "model": getattr(agent, 'model', 'unknown')
+                        "model": getattr(agent, 'model', getattr(agent, 'model_name', 'unknown'))
                     }
                 )
                 
+                logger.info(f"📊 Trace result: {json.dumps(trace_result, indent=2)}")
+                
                 if trace_result.get("success"):
                     final_response = trace_result.get("response", "No response received")
+                    logger.info(f"✅ Traced execution successful, response length: {len(final_response)}")
                 else:
+                    logger.error(f"❌ Traced execution failed: {trace_result.get('error', 'Unknown error')}")
                     return AgentExecutionResult(
                         success=False,
                         error=trace_result.get("error", "Unknown error"),
                         execution_time=time.time() - start_time
                     )
             else:
+                logger.info(f"🔄 Using fallback execution without tracing...")
                 # Fallback to regular execution without tracing
                 # Ensure session exists
                 try:
+                    logger.info(f"📝 Creating session: app_name={self.app_name}, user_id={effective_user_id}, session_id={session_id}")
                     await self.session_service.create_session(
                         app_name=self.app_name,
                         user_id=effective_user_id,
                         session_id=session_id
                     )
-                except:
+                    logger.info(f"✅ Session created successfully")
+                except Exception as e:
+                    logger.info(f"⚠️ Session creation failed (might already exist): {e}")
                     pass  # Session might already exist
                 
                 # Create runner for the agent
+                logger.info(f"🏃 Creating runner for agent...")
                 runner = Runner(
                     agent=agent,
                     app_name=self.app_name,
                     session_service=self.session_service
                 )
+                logger.info(f"✅ Runner created successfully")
                 
                 # Format the message using Google ADK types
                 user_content = types.Content(
                     role='user',
                     parts=[types.Part(text=prompt)]
                 )
+                logger.info(f"📝 Formatted user content: role=user, text_length={len(prompt)}")
                 
                 # Execute the agent using the runner
                 final_response = "No response received"
+                event_count = 0
+                logger.info(f"🚀 Starting agent execution with runner...")
+                
                 async for event in runner.run_async(
                     user_id=effective_user_id,
                     session_id=session_id,
                     new_message=user_content
                 ):
+                    event_count += 1
+                    logger.info(f"📨 Event #{event_count}: {type(event).__name__}")
+                    
                     if event.is_final_response() and event.content and event.content.parts:
                         final_response = event.content.parts[0].text
+                        logger.info(f"✅ Final response received: {len(final_response)} characters")
                         break
+                    else:
+                        logger.info(f"📝 Intermediate event: {event}")
+                
+                logger.info(f"🏁 Execution completed after {event_count} events")
             
             result_text = final_response
-            
             execution_time = time.time() - start_time
+            
+            logger.info(f"⏱️ Execution completed in {execution_time:.2f} seconds")
+            logger.info(f"📄 Final response: {result_text[:200]}..." if len(result_text) > 200 else f"📄 Final response: {result_text}")
             
             # Store in session if provided
             if session_id:
+                logger.info(f"💾 Storing conversation in session {session_id}")
                 if session_id not in self.sessions:
                     self.sessions[session_id] = []
                 
@@ -704,6 +1007,11 @@ class ADKService:
         except Exception as exc:
             execution_time = time.time() - start_time
             error_msg = f"Error executing agent: {str(exc)}"
+            logger.error(f"❌ Error executing agent {agent_id}: {exc}")
+            logger.error(f"📊 Execution time before error: {execution_time:.2f} seconds")
+            logger.error(f"🔍 Error type: {type(exc).__name__}")
+            logger.error(f"📋 Error details: {traceback.format_exc()}")
+            
             print(error_msg)
             
             return AgentExecutionResult(

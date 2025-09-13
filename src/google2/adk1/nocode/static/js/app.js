@@ -1672,6 +1672,104 @@ class AgentGeniePlatform {
         }
     }
     
+    async editTool(toolId) {
+        try {
+            this.showLoading(true);
+            
+            // Find the tool in our local tools array
+            const tool = this.tools.find(t => t.id === toolId);
+            if (!tool) {
+                this.showMessage('Tool not found', 'error');
+                return;
+            }
+            
+            console.log('Editing tool:', tool);
+            console.log('Tool function code:', tool.function_code);
+            
+            // Populate the edit form with tool data
+            document.getElementById('editToolId').value = tool.id;
+            document.getElementById('editToolName').value = tool.name;
+            document.getElementById('editToolType').value = tool.tool_type;
+            document.getElementById('editToolDescription').value = tool.description;
+            
+            // Show the edit modal first
+            this.showModal('editToolModal');
+            
+            // Show/hide function code section based on tool type
+            const functionCodeSection = document.getElementById('editFunctionCodeSection');
+            if (tool.tool_type === 'function') {
+                functionCodeSection.classList.remove('hidden');
+                
+                // Set the function code value
+                const functionCode = tool.function_code || '';
+                document.getElementById('editToolFunctionCode').value = functionCode;
+                console.log('Set function code value:', functionCode);
+                
+                // Initialize CodeMirror editor for edit modal after modal is shown
+                setTimeout(() => {
+                    this.initializeEditCodeEditor();
+                }, 100);
+            } else {
+                functionCodeSection.classList.add('hidden');
+            }
+            
+        } catch (error) {
+            console.error('Error loading tool for editing:', error);
+            this.showMessage('Error loading tool for editing', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+    
+    initializeEditCodeEditor() {
+        // Initialize CodeMirror for the edit modal
+        const editCodeEditor = document.getElementById('editCodeEditor');
+        const editToolFunctionCode = document.getElementById('editToolFunctionCode');
+        const editCodeTheme = document.getElementById('editCodeTheme');
+        
+        console.log('Initializing edit code editor...');
+        console.log('Function code value:', editToolFunctionCode.value);
+        
+        // Clear existing editor if any
+        if (editCodeEditor.innerHTML.trim()) {
+            editCodeEditor.innerHTML = '';
+        }
+        
+        // Get the function code value
+        const functionCodeValue = editToolFunctionCode.value || '';
+        console.log('CodeMirror will initialize with value:', functionCodeValue);
+        
+        // Initialize CodeMirror
+        const editor = CodeMirror(editCodeEditor, {
+            value: functionCodeValue,
+            mode: 'python',
+            theme: editCodeTheme.value,
+            lineNumbers: true,
+            lineWrapping: true,
+            indentUnit: 4,
+            tabSize: 4,
+            lineNumberFormatter: (line) => line
+        });
+        
+        // Sync with textarea
+        editor.on('change', () => {
+            editToolFunctionCode.value = editor.getValue();
+        });
+        
+        // Theme change handler
+        editCodeTheme.addEventListener('change', () => {
+            editor.setOption('theme', editCodeTheme.value);
+        });
+        
+        // Store editor reference
+        this.editCodeEditor = editor;
+        
+        console.log('Edit code editor initialized with value:', editor.getValue());
+        
+        // Force refresh the editor content
+        editor.refresh();
+    }
+    
     async deleteProject(projectId) {
         if (!confirm('Are you sure you want to delete this project?')) return;
         
@@ -1703,10 +1801,6 @@ class AgentGeniePlatform {
         }
     }
     
-    editTool(toolId) {
-        // Implementation for editing tools
-        this.showMessage('Tool editing coming soon!', 'info');
-    }
     
     async editProject(projectId) {
         try {
