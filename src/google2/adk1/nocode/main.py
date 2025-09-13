@@ -865,6 +865,7 @@ async def update_agent(agent_id: str, agent_update: AgentUpdateRequest):
             instructions=agent_update.instructions,
             sub_agents=agent_update.sub_agents,
             tools=agent_update.tools,
+            model_provider=agent_update.model_provider,
             model_settings=agent_update.model_settings,
             workflow_config=agent_update.workflow_config,
             ui_config=agent_update.ui_config,

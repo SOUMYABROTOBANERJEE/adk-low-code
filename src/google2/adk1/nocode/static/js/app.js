@@ -1511,8 +1511,14 @@ class AgentGeniePlatform {
             return;
         }
         
+        // Generate unique ID if not provided
+        let toolId = document.getElementById('toolId').value.trim();
+        if (!toolId) {
+            toolId = 'tool_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+        
         const toolData = {
-            id: document.getElementById('toolId').value,
+            id: toolId,
             name: document.getElementById('toolName').value,
             description: document.getElementById('toolDescription').value,
             tool_type: toolType,

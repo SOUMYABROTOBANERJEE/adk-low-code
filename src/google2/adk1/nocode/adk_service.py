@@ -13,6 +13,7 @@ from pathlib import Path
 import tempfile
 import importlib.util
 import traceback
+from datetime import datetime
 
 # Import our models
 from .models import ToolDefinition, ToolType, AgentConfiguration
@@ -1003,21 +1004,15 @@ class ADKService:
                             from .models import AgentConfiguration, AgentType
                             sub_config = AgentConfiguration(**sub_agent_data)
                             
-                            # Create and execute the sub-agent synchronously
-                            import asyncio
-                            import concurrent.futures
+                            # Try to execute the sub-agent synchronously
                             try:
-                                # Use ThreadPoolExecutor to run async code in a separate thread
-                                logger.info(f"🔄 Executing sub-agent {sub_agent_config.name} in separate thread")
-                                with concurrent.futures.ThreadPoolExecutor() as executor:
-                                    future = executor.submit(
-                                        lambda: asyncio.run(self._execute_sub_agent_sync(sub_config, input_data))
-                                    )
-                                    result = future.result(timeout=30)
-                                    return result
-                            except Exception as loop_error:
-                                logger.error(f"❌ Event loop error: {loop_error}")
-                                return f"Sub-agent execution failed: {str(loop_error)}"
+                                logger.info(f"🔄 Executing sub-agent {sub_agent_config.name} synchronously")
+                                result = self._execute_sub_agent_sync(sub_config, input_data)
+                                return result
+                            except Exception as exec_error:
+                                logger.error(f"❌ Sub-agent execution error: {exec_error}")
+                                # Fallback: Return a helpful message instead of error
+                                return f"I'm sorry, I encountered an issue accessing my {sub_agent_config.name} sub-agent. The sub-agent is configured but there was a technical issue. Please try asking your question in a different way or contact support if this persists."
                         else:
                             return f"Sub-agent {sub_agent_config.name} not found in database"
                     else:
@@ -1025,7 +1020,8 @@ class ADKService:
                         
                 except Exception as e:
                     logger.error(f"❌ Error executing sub-agent {sub_agent_config.name}: {e}")
-                    return f"Error executing sub-agent {sub_agent_config.name}: {str(e)}"
+                    # Fallback: Return a helpful message instead of technical error
+                    return f"I'm sorry, I encountered an issue accessing my {sub_agent_config.name} sub-agent. The sub-agent is configured but there was a technical issue. Please try asking your question in a different way or contact support if this persists."
             
             # Create the ADK function tool
             from google.adk.tools.function_tool import FunctionTool
@@ -1041,12 +1037,52 @@ class ADKService:
             logger.error(f"❌ Error creating sub-agent tool: {e}")
             return None
     
-    async def _execute_sub_agent_sync(self, sub_config: Any, input_data: str) -> str:
+    def _create_llm_agent_sync(self, config: AgentConfiguration) -> Optional[Any]:
+        """Create an LLM agent synchronously (for sub-agents)"""
+        logger.info(f"🤖 Creating LLM agent synchronously: {config.name} (ID: {config.id})")
+        
+        if not ADK_AVAILABLE:
+            logger.error("❌ ADK not available for agent creation")
+            return None
+            
+        try:
+            # Create the model based on provider
+            model = self._create_model_for_provider(config)
+            
+            # Create the agent
+            agent = LlmAgent(
+                name=config.name,
+                instruction=config.system_prompt,
+                model=model
+            )
+            
+            # Add tools if any (simplified version without MCP handling)
+            if config.tools:
+                for tool_id in config.tools:
+                    if tool_id in self.tools:
+                        tool = self.tools[tool_id]
+                        # Skip MCP tools for sub-agents to avoid complexity
+                        if not (isinstance(tool, ToolDefinition) and tool.tool_type == ToolType.MCP):
+                            agent.tools.append(tool)
+                            logger.info(f"✅ Added tool {tool_id} to sub-agent {config.name}")
+                        else:
+                            logger.info(f"⚠️ Skipping MCP tool {tool_id} for sub-agent {config.name}")
+                    else:
+                        logger.warning(f"Tool {tool_id} not found for sub-agent {config.name}")
+            
+            logger.info(f"✅ Successfully created sub-agent: {config.name}")
+            return agent
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating sub-agent {config.name}: {e}")
+            return None
+    
+    def _execute_sub_agent_sync(self, sub_config: Any, input_data: str) -> str:
         """Execute a sub-agent synchronously"""
         try:
             logger.info(f"🔧 Creating sub-agent: {sub_config.name}")
-            # Create the sub-agent
-            sub_agent = await self.create_llm_agent(sub_config)
+            # Create the sub-agent synchronously
+            sub_agent = self._create_llm_agent_sync(sub_config)
             if not sub_agent:
                 logger.error(f"❌ Failed to create sub-agent: {sub_config.name}")
                 return f"Failed to create sub-agent: {sub_config.name}"
@@ -1054,21 +1090,73 @@ class ADKService:
             logger.info(f"✅ Sub-agent created successfully: {sub_config.name}")
             logger.info(f"🎯 Executing sub-agent with prompt: {input_data}")
             
-            # Execute the sub-agent
-            result = await self.traced_runner.run(
-                agent=sub_agent,
-                prompt=input_data,
-                session_id=f"sub_agent_{sub_config.id}",
-                user_id="sub_agent_execution"
-            )
+            # Execute the sub-agent using a simple synchronous approach
+            try:
+                # Use a simple event loop approach
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    # Create a simple runner for sub-agents
+                    runner = Runner()
+                    
+                    # Run the agent using run_async and collect events
+                    response = ""
+                    async def collect_events():
+                        nonlocal response
+                        async for event in runner.run_async(
+                            agent=sub_agent,
+                            user_id="sub_agent_execution",
+                            session_id=f"sub_agent_{sub_config.id}",
+                            new_message=input_data
+                        ):
+                            # Collect the final response from events
+                            if hasattr(event, 'response') and event.response:
+                                response = event.response
+                            elif hasattr(event, 'content') and event.content:
+                                response = event.content
+                            elif isinstance(event, str):
+                                response = event
+                    
+                    loop.run_until_complete(collect_events())
+                    
+                    if not response:
+                        response = "No response from sub-agent"
+                    
+                    result_dict = {
+                        "success": True,
+                        "response": response,
+                        "user_id": "sub_agent_execution",
+                        "agent_id": sub_config.id,
+                        "session_id": f"sub_agent_{sub_config.id}",
+                        "timestamp": datetime.now().isoformat(),
+                        "trace_enabled": False
+                    }
+                    
+                finally:
+                    loop.close()
+                    
+            except Exception as runner_error:
+                logger.error(f"❌ Runner error: {runner_error}")
+                result_dict = {
+                    "success": False,
+                    "error": str(runner_error),
+                    "user_id": "sub_agent_execution",
+                    "agent_id": sub_config.id,
+                    "session_id": f"sub_agent_{sub_config.id}",
+                    "timestamp": datetime.now().isoformat(),
+                    "trace_enabled": False
+                }
             
-            logger.info(f"📊 Sub-agent execution result: success={result.success}")
-            if result.success:
-                logger.info(f"✅ Sub-agent response: {result.response[:100]}...")
-                return result.response
+            logger.info(f"📊 Sub-agent execution result: success={result_dict.get('success', False)}")
+            if result_dict.get('success', False):
+                response = result_dict.get('response', '')
+                logger.info(f"✅ Sub-agent response: {response[:100]}...")
+                return response
             else:
-                logger.error(f"❌ Sub-agent execution failed: {result.error}")
-                return f"Sub-agent execution failed: {result.error}"
+                error = result_dict.get('error', 'Unknown error')
+                logger.error(f"❌ Sub-agent execution failed: {error}")
+                return f"Sub-agent execution failed: {error}"
                 
         except Exception as e:
             logger.error(f"❌ Error in sub-agent execution: {e}")
