@@ -575,8 +575,10 @@ adk-low-code/
 ### **🛠️ Tool Integration**
 - **Custom Tools**: Build Python-based function tools
 - **Built-in Tools**: Access Google Search and other ADK tools
+- **MCP Tools**: Connect to Model Context Protocol servers
 - **AI Code Generation**: Get intelligent tool code suggestions
 - **Tool Testing**: Built-in testing framework
+- **Environment Variables**: Secure configuration for external services
 
 ### **🔍 Observability**
 - **Cloud Trace**: Complete user ID tracking for all agent executions
@@ -595,6 +597,88 @@ adk-low-code/
 - **Cloud Trace**: Distributed tracing with user context
 - **Cloud Run**: Serverless deployment platform
 - **Auto-scaling**: Handles traffic spikes automatically
+
+---
+
+## 🔌 **Model Context Protocol (MCP) Integration**
+
+The platform supports **Model Context Protocol (MCP)** servers, allowing agents to connect to external tools and services seamlessly.
+
+### **Supported MCP Servers**
+
+| **Server** | **Package** | **Description** | **Environment Variables** |
+|------------|--------------|-----------------|---------------------------|
+| **Filesystem** | `@modelcontextprotocol/server-filesystem` | File system operations | `NODE_ENV`, `DEBUG` |
+| **AWS S3** | `@geunoh/s3-mcp-server` | S3 bucket operations | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
+| **GitHub** | `@modelcontextprotocol/server-github` | GitHub API operations | `GITHUB_TOKEN`, `GITHUB_API_URL` |
+| **SQLite** | `@modelcontextprotocol/server-sqlite` | Database operations | `DATABASE_URL`, `DB_PATH` |
+
+### **Creating MCP Tools**
+
+**Via UI:**
+1. Create Tool → Select "MCP Server Tool"
+2. Configure:
+   - **Command**: `npx`
+   - **Arguments**: `-y`, `@modelcontextprotocol/server-filesystem`
+   - **Environment Variables**: Use templates (AWS, GitHub, Database)
+   - **Timeout**: `300`
+
+**Via API:**
+```json
+{
+  "id": "filesystem_mcp",
+  "name": "Filesystem MCP",
+  "description": "File system operations via MCP",
+  "tool_type": "mcp",
+  "mcp_configuration": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+    "env": {
+      "NODE_ENV": "production",
+      "DEBUG": "true"
+    },
+    "timeout": 300
+  }
+}
+```
+
+### **Environment Variable Templates**
+
+The platform provides pre-configured templates for common services:
+
+**AWS Template:**
+```json
+{
+  "AWS_ACCESS_KEY_ID": "your_access_key_here",
+  "AWS_SECRET_ACCESS_KEY": "your_secret_key_here",
+  "AWS_REGION": "us-east-1",
+  "AWS_SESSION_TOKEN": "your_session_token_here",
+  "NODE_ENV": "production"
+}
+```
+
+**GitHub Template:**
+```json
+{
+  "GITHUB_TOKEN": "your_github_token_here",
+  "GITHUB_API_URL": "https://api.github.com",
+  "GITHUB_OWNER": "your_username",
+  "NODE_ENV": "production"
+}
+```
+
+**Database Template:**
+```json
+{
+  "DATABASE_URL": "postgresql://user:password@localhost:5432/dbname",
+  "DB_HOST": "localhost",
+  "DB_PORT": "5432",
+  "DB_NAME": "your_database",
+  "DB_USER": "your_username",
+  "DB_PASSWORD": "your_password",
+  "NODE_ENV": "production"
+}
+```
 
 ---
 

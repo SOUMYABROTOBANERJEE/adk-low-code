@@ -116,6 +116,11 @@ class FirestoreManager:
             doc_ref.set(serialized_data)
             
             logger.info(f"Tool {tool_data['id']} saved to Firestore")
+            logger.info(f"🔧 Serialized data keys: {list(serialized_data.keys())}")
+            if 'mcp_config' in serialized_data:
+                logger.info(f"🔧 MCP config stored: {serialized_data['mcp_config']}")
+            else:
+                logger.warning(f"🔧 MCP config NOT found in serialized data!")
             return True
             
         except Exception as e:
@@ -669,6 +674,24 @@ class FirestoreManager:
         except Exception as e:
             logger.error(f"Error deleting agent embed: {e}")
             return False
+    
+    def get_all_embeds(self) -> List[Dict[str, Any]]:
+        """Get all embeds from Firestore"""
+        try:
+            embeds_ref = self.collection.document('agent_embeds').collection('items')
+            docs = embeds_ref.stream()
+            
+            embeds = []
+            for doc in docs:
+                embed_data = doc.to_dict()
+                embed_data['embed_id'] = doc.id
+                embeds.append(embed_data)
+            
+            return embeds
+            
+        except Exception as e:
+            logger.error(f"Error getting all embeds: {e}")
+            return []
     
     def get_all_chat_sessions(self) -> List[Dict[str, Any]]:
         """Get all chat sessions from Firestore"""

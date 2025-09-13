@@ -14,6 +14,9 @@ import tempfile
 import importlib.util
 import traceback
 
+# Import our models
+from .models import ToolDefinition, ToolType, AgentConfiguration
+
 # Set up detailed logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -28,6 +31,8 @@ try:
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
+    # MCP imports
+    from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
     
     ADK_AVAILABLE = True
     print("Google ADK loaded successfully")
@@ -36,6 +41,17 @@ except ImportError as e:
     ADK_AVAILABLE = False
     print(f"Warning: Google ADK not available. Import error: {e}")
     print("Install with: pip install google-adk")
+
+# LiteLLM imports for multi-model support
+try:
+    import litellm
+    from litellm import completion
+    LITELLM_AVAILABLE = True
+    print("LiteLLM loaded successfully")
+except ImportError as e:
+    LITELLM_AVAILABLE = False
+    print(f"Warning: LiteLLM not available. Import error: {e}")
+    print("Install with: pip install litellm")
 
 # Import Google GenAI for prompt suggestions
 try:
@@ -50,9 +66,10 @@ except ImportError as e:
 
 from .models import (
     AgentConfiguration, ToolDefinition, SubAgent, AgentType, 
-    ToolType, AgentExecutionResult, ChatMessage
+    ToolType, AgentExecutionResult, ChatMessage, ModelProvider
 )
 from .traced_agent_runner import get_traced_runner
+from .model_service import ModelService
 
 
 class ADKService:
@@ -70,6 +87,7 @@ class ADKService:
         self.app_name = "google_adk_platform"
         self.user_id = "default_user"
         self.db_manager = db_manager
+        self.model_service = ModelService()
         
         # Set up service account authentication for all Google services
         if os.path.exists("svcacct.json"):
@@ -351,8 +369,8 @@ class ADKService:
             logger.error(f"❌ Invalid tool definition: type={tool_def.tool_type}, has_code={bool(tool_def.function_code)}")
             return None
             
-        logger.info(f"📝 Tool function code length: {len(tool_def.function_code)} characters")
-        logger.info(f"📋 Tool function code preview: {tool_def.function_code[:200]}...")
+        logger.debug(f"📝 Tool function code length: {len(tool_def.function_code)} characters")
+        logger.debug(f"📋 Tool function code preview: {tool_def.function_code[:200]}...")
             
         try:
             # Create a proper ADK function tool
@@ -474,10 +492,7 @@ class ADKService:
                 logger.info(f"✅ FunctionTool imported successfully")
                 # Check the correct constructor parameters for FunctionTool
                 try:
-                    adk_tool = FunctionTool(
-                        function=tool_function,
-                        description=tool_def.description
-                    )
+                    adk_tool = FunctionTool(tool_function)
                     logger.info(f"✅ ADK FunctionTool created successfully: {type(adk_tool)}")
                     # Wrap the FunctionTool to make it callable
                     def wrapped_tool(input_data: str) -> str:
@@ -561,9 +576,148 @@ class ADKService:
             print(f"Error creating function tool {tool_def.name}: {exc}")
             return None
     
+    async def create_mcp_tool(self, tool_def: ToolDefinition) -> Optional[Any]:
+        """Create an MCP tool from configuration"""
+        logger.info(f"🔧 Creating MCP tool: {tool_def.name} (ID: {tool_def.id})")
+        
+        if not ADK_AVAILABLE:
+            logger.error("❌ ADK not available for MCP tool creation")
+            return None
+            
+        # Check for MCP config in various field names (due to storage issues)
+        mcp_config = tool_def.mcp_config or tool_def.mcp_server_config or tool_def.mcp_configuration
+        
+        if not mcp_config:
+            logger.error(f"❌ MCP config missing for tool '{tool_def.name}'")
+            logger.error(f"🔧 Available fields: mcp_config={tool_def.mcp_config}, mcp_server_config={tool_def.mcp_server_config}, mcp_configuration={tool_def.mcp_configuration}")
+            return None
+            
+        try:
+            # Extract MCP configuration (already retrieved above)
+            command = mcp_config.get("command", "npx")
+            args = mcp_config.get("args", [])
+            env = mcp_config.get("env", {})
+            timeout = mcp_config.get("timeout", 300)
+            
+            logger.info(f"📋 MCP Config: command={command}, args={args}, env_keys={list(env.keys())}")
+            
+            # Create server parameters (using StdioConnectionParams as recommended)
+            from google.adk.tools.mcp_tool.mcp_toolset import StdioConnectionParams
+            server_params = StdioConnectionParams(
+                server_params={
+                    "command": command,
+                    "args": args,
+                    "env": env
+                }
+            )
+            
+            # Create MCP toolset
+            logger.info(f"🔗 Connecting to MCP server...")
+            mcp_toolset = MCPToolset(
+                connection_params=server_params
+            )
+            
+            logger.info(f"✅ MCP toolset created successfully for '{tool_def.name}'")
+            return mcp_toolset
+            
+        except Exception as exc:
+            logger.error(f"❌ Error creating MCP tool '{tool_def.name}': {exc}")
+            logger.error(f"📋 MCP tool creation error details: {traceback.format_exc()}")
+            return None
+    
+    async def _convert_mcp_tools_for_agent(self, agent):
+        """Convert MCP ToolDefinition objects to MCPToolset objects for agent execution"""
+        if not hasattr(agent, 'tools'):
+            return
+            
+        converted_tools = []
+        for tool in agent.tools:
+            if isinstance(tool, ToolDefinition) and tool.tool_type == ToolType.MCP:
+                logger.info(f"🔧 Converting MCP ToolDefinition to MCPToolset: {tool.name}")
+                try:
+                    mcp_toolset = await self.create_mcp_tool(tool)
+                    if mcp_toolset:
+                        converted_tools.append(mcp_toolset)
+                        logger.info(f"✅ MCP toolset converted: {tool.name}")
+                    else:
+                        logger.error(f"❌ Failed to convert MCP tool: {tool.name}")
+                except Exception as e:
+                    logger.error(f"❌ Error converting MCP tool {tool.name}: {e}")
+            else:
+                converted_tools.append(tool)
+        
+        # Update agent tools with converted tools
+        agent.tools = converted_tools
+        logger.info(f"🔧 Agent tools converted: {len(converted_tools)} tools")
+    
+    def _create_model_for_provider(self, config: AgentConfiguration) -> Any:
+        """Create model instance based on provider"""
+        provider = getattr(config, 'model_provider', ModelProvider.GOOGLE)
+        model_name = config.model_settings.get("model", "gemini-2.0-flash")
+        temperature = config.model_settings.get("temperature", 0.7)
+        max_tokens = config.model_settings.get("max_tokens", 1000)
+        
+        logger.info(f"🔧 Creating model: provider={provider}, model={model_name}")
+        
+        if provider == ModelProvider.GOOGLE:
+            # Use Google Gemini with service account
+            return Gemini(
+                model=model_name,
+                temperature=temperature,
+                max_output_tokens=max_tokens
+            )
+        else:
+            # For non-Google providers, we'll use LiteLLM
+            if not LITELLM_AVAILABLE:
+                logger.warning(f"⚠️ LiteLLM not available, falling back to Google Gemini")
+                return Gemini(
+                    model="gemini-2.0-flash",
+                    temperature=temperature,
+                    max_output_tokens=max_tokens
+                )
+            
+            # Validate provider configuration
+            if not self.model_service.validate_provider_config(provider):
+                logger.warning(f"⚠️ Provider {provider} not configured, falling back to Google Gemini")
+                return Gemini(
+                    model="gemini-2.0-flash",
+                    temperature=temperature,
+                    max_output_tokens=max_tokens
+                )
+            
+            # Create LiteLLM model
+            litellm_model_name = self.model_service.get_litellm_model_name(provider, model_name)
+            logger.info(f"🔧 Using LiteLLM model: {litellm_model_name}")
+            
+            # For now, we'll create a custom model wrapper that uses LiteLLM
+            # This is a simplified approach - in production, you'd want a more robust integration
+            class LiteLLMModel:
+                def __init__(self, model_name, temperature, max_tokens):
+                    self.model_name = model_name
+                    self.temperature = temperature
+                    self.max_tokens = max_tokens
+                
+                def generate_content(self, prompt, **kwargs):
+                    """Generate content using LiteLLM"""
+                    try:
+                        response = litellm.completion(
+                            model=self.model_name,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=self.temperature,
+                            max_tokens=self.max_tokens,
+                            **kwargs
+                        )
+                        return response.choices[0].message.content
+                    except Exception as e:
+                        logger.error(f"❌ LiteLLM generation failed: {e}")
+                        return f"Error generating content: {str(e)}"
+            
+            return LiteLLMModel(litellm_model_name, temperature, max_tokens)
+    
     def _extract_imports_from_code(self, code: str) -> Dict[str, Any]:
         """
         Extract import statements from Python code and return a dictionary of imported modules.
+        Automatically installs missing packages using pip.
         
         Args:
             code: Python code string
@@ -573,8 +727,11 @@ class ADKService:
         """
         import ast
         import importlib
+        import subprocess
+        import sys
         
         imports_dict = {}
+        missing_packages = set()
         
         try:
             # Parse the code into an AST
@@ -608,6 +765,10 @@ class ADKService:
                                         
                         except ImportError as e:
                             logger.warning(f"⚠️ Failed to import {module_name}: {e}")
+                            # Add to missing packages for auto-installation
+                            package_name = module_name.split('.')[0]
+                            missing_packages.add(package_name)
+                            
                             # Try to import parent modules if this fails
                             if '.' in module_name:
                                 parent_module = module_name.rsplit('.', 1)[0]
@@ -664,6 +825,10 @@ class ADKService:
                                         
                         except ImportError as e:
                             logger.warning(f"⚠️ Failed to import from {module_name}: {e}")
+                            # Add to missing packages for auto-installation
+                            package_name = module_name.split('.')[0]
+                            missing_packages.add(package_name)
+                            
                             # Try to import parent modules if this fails
                             if '.' in module_name:
                                 parent_module = module_name.rsplit('.', 1)[0]
@@ -673,6 +838,30 @@ class ADKService:
                                     imports_dict[parent_module] = parent
                                 except ImportError:
                                     pass
+            
+            # Auto-install missing packages
+            if missing_packages:
+                logger.info(f"🔧 Auto-installing missing packages: {list(missing_packages)}")
+                for package in missing_packages:
+                    try:
+                        logger.info(f"📦 Installing package: {package}")
+                        subprocess.check_call([
+                            sys.executable, "-m", "pip", "install", package, "--quiet"
+                        ])
+                        logger.info(f"✅ Successfully installed {package}")
+                        
+                        # Try to import the package again
+                        try:
+                            module = importlib.import_module(package)
+                            imports_dict[package] = module
+                            logger.info(f"✅ Successfully imported {package} after installation")
+                        except ImportError as e:
+                            logger.warning(f"⚠️ Still failed to import {package} after installation: {e}")
+                            
+                    except subprocess.CalledProcessError as e:
+                        logger.error(f"❌ Failed to install package {package}: {e}")
+                    except Exception as e:
+                        logger.error(f"❌ Unexpected error installing {package}: {e}")
                             
         except SyntaxError as e:
             logger.warning(f"⚠️ Syntax error in code: {e}")
@@ -681,7 +870,7 @@ class ADKService:
                 
         return imports_dict
     
-    def create_llm_agent(self, config: AgentConfiguration) -> Optional[Any]:
+    async def create_llm_agent(self, config: AgentConfiguration) -> Optional[Any]:
         """Create an LLM agent from configuration"""
         logger.info(f"🤖 Creating LLM agent: {config.name} (ID: {config.id})")
         logger.info(f"📋 Agent config: type={config.agent_type}, model={config.model_settings.get('model', 'default')}, tools_count={len(config.tools) if config.tools else 0}")
@@ -696,12 +885,8 @@ class ADKService:
             print(f"Available tools: {list(self.tools.keys())}")
             print(f"Requested tools: {config.tools}")
             
-            # Create the model with service account authentication
-            model = Gemini(
-                model=config.model_settings.get("model", "gemini-2.0-flash"),
-                temperature=config.model_settings.get("temperature", 0.7),
-                max_output_tokens=config.model_settings.get("max_tokens", 1000)
-            )
+            # Create the model based on provider
+            model = self._create_model_for_provider(config)
             
             # Create the agent
             agent = LlmAgent(
@@ -715,12 +900,64 @@ class ADKService:
                 print(f"Adding tools to agent: {config.tools}")
                 for tool_id in config.tools:
                     if tool_id in self.tools:
-                        print(f"Adding tool {tool_id} to agent")
-                        agent.tools.append(self.tools[tool_id])
+                        tool = self.tools[tool_id]
+                        
+                        # Handle MCP tools - they need async creation
+                        if isinstance(tool, ToolDefinition) and tool.tool_type == ToolType.MCP:
+                            print(f"Creating MCP tool {tool_id} for agent")
+                            try:
+                                # Create MCP tool asynchronously
+                                import asyncio
+                                try:
+                                    # Try to get existing event loop
+                                    loop = asyncio.get_event_loop()
+                                    if loop.is_running():
+                                        # If loop is running, we need to use a different approach
+                                        print(f"⚠️ Event loop is running, deferring MCP tool creation for {tool_id}")
+                                        # Store the tool definition for later async creation
+                                        agent.tools.append(tool)
+                                    else:
+                                        mcp_tool = loop.run_until_complete(self.create_mcp_tool(tool))
+                                        if mcp_tool:
+                                            agent.tools.append(mcp_tool)
+                                            print(f"✅ MCP tool {tool_id} added to agent")
+                                        else:
+                                            print(f"❌ Failed to create MCP tool {tool_id}")
+                                except RuntimeError:
+                                    # No event loop, create one
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                    mcp_tool = loop.run_until_complete(self.create_mcp_tool(tool))
+                                    loop.close()
+                                    
+                                    if mcp_tool:
+                                        agent.tools.append(mcp_tool)
+                                        print(f"✅ MCP tool {tool_id} added to agent")
+                                    else:
+                                        print(f"❌ Failed to create MCP tool {tool_id}")
+                            except Exception as e:
+                                print(f"❌ Error creating MCP tool {tool_id}: {e}")
+                                # Add the tool definition anyway for later processing
+                                agent.tools.append(tool)
+                        else:
+                            print(f"Adding tool {tool_id} to agent")
+                            agent.tools.append(tool)
                     else:
                         print(f"Warning: Tool {tool_id} not found in registered tools")
             
             print(f"Successfully created agent: {config.name}")
+            # Store agent in memory for execution
+            # Handle sub-agents if any
+            if config.sub_agents:
+                logger.info(f"🔗 Processing {len(config.sub_agents)} sub-agents for agent {config.name}")
+                await self._add_sub_agents_to_agent(agent, config.sub_agents)
+            
+            # Store the agent
+            self.agents[config.id] = agent
+            
+            # Store the original config for MCP tool conversion later
+            agent._original_config = config
+            
             return agent
             
         except Exception as exc:
@@ -729,10 +966,119 @@ class ADKService:
             traceback.print_exc()
             return None
     
-    def create_agent(self, config: AgentConfiguration) -> Optional[Any]:
+    async def _add_sub_agents_to_agent(self, parent_agent: Any, sub_agents: List[Any]) -> None:
+        """Add sub-agents to a parent agent by creating tools that delegate to sub-agents"""
+        logger.info(f"🔗 Adding {len(sub_agents)} sub-agents to parent agent")
+        
+        for sub_agent_config in sub_agents:
+            try:
+                logger.info(f"🔧 Creating sub-agent tool for: {sub_agent_config.name} (ID: {sub_agent_config.id})")
+                
+                # Create a tool that delegates to the sub-agent
+                sub_agent_tool = self._create_sub_agent_tool(sub_agent_config)
+                if sub_agent_tool:
+                    parent_agent.tools.append(sub_agent_tool)
+                    logger.info(f"✅ Added sub-agent tool: {sub_agent_config.name}")
+                else:
+                    logger.error(f"❌ Failed to create sub-agent tool: {sub_agent_config.name}")
+                    
+            except Exception as e:
+                logger.error(f"❌ Error creating sub-agent tool for {sub_agent_config.name}: {e}")
+                logger.error(f"📋 Sub-agent tool creation error details: {traceback.format_exc()}")
+    
+    def _create_sub_agent_tool(self, sub_agent_config: Any) -> Optional[Any]:
+        """Create a tool that delegates execution to a sub-agent"""
+        try:
+            # Create a synchronous function that will execute the sub-agent
+            def sub_agent_executor(input_data: str, tool_context: Optional[Any] = None) -> str:
+                """Execute a sub-agent with the given input"""
+                try:
+                    logger.info(f"🎯 Executing sub-agent: {sub_agent_config.name}")
+                    
+                    # Get the sub-agent from the database
+                    if self.db_manager:
+                        sub_agent_data = self.db_manager.get_agent(sub_agent_config.id)
+                        if sub_agent_data:
+                            # Create a temporary agent configuration
+                            from .models import AgentConfiguration, AgentType
+                            sub_config = AgentConfiguration(**sub_agent_data)
+                            
+                            # Create and execute the sub-agent synchronously
+                            import asyncio
+                            import concurrent.futures
+                            try:
+                                # Use ThreadPoolExecutor to run async code in a separate thread
+                                logger.info(f"🔄 Executing sub-agent {sub_agent_config.name} in separate thread")
+                                with concurrent.futures.ThreadPoolExecutor() as executor:
+                                    future = executor.submit(
+                                        lambda: asyncio.run(self._execute_sub_agent_sync(sub_config, input_data))
+                                    )
+                                    result = future.result(timeout=30)
+                                    return result
+                            except Exception as loop_error:
+                                logger.error(f"❌ Event loop error: {loop_error}")
+                                return f"Sub-agent execution failed: {str(loop_error)}"
+                        else:
+                            return f"Sub-agent {sub_agent_config.name} not found in database"
+                    else:
+                        return f"No database manager available for sub-agent {sub_agent_config.name}"
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error executing sub-agent {sub_agent_config.name}: {e}")
+                    return f"Error executing sub-agent {sub_agent_config.name}: {str(e)}"
+            
+            # Create the ADK function tool
+            from google.adk.tools.function_tool import FunctionTool
+            adk_tool = FunctionTool(sub_agent_executor)
+            
+            # Set the tool name to match what the LLM will call
+            adk_tool.name = "sub_agent_executor"
+            adk_tool.description = f"Use this tool to delegate tasks to your sub-agent '{sub_agent_config.name}'. Call this function when you need help from your sub-agent. Input: the question or task for the sub-agent."
+            
+            return adk_tool
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating sub-agent tool: {e}")
+            return None
+    
+    async def _execute_sub_agent_sync(self, sub_config: Any, input_data: str) -> str:
+        """Execute a sub-agent synchronously"""
+        try:
+            logger.info(f"🔧 Creating sub-agent: {sub_config.name}")
+            # Create the sub-agent
+            sub_agent = await self.create_llm_agent(sub_config)
+            if not sub_agent:
+                logger.error(f"❌ Failed to create sub-agent: {sub_config.name}")
+                return f"Failed to create sub-agent: {sub_config.name}"
+            
+            logger.info(f"✅ Sub-agent created successfully: {sub_config.name}")
+            logger.info(f"🎯 Executing sub-agent with prompt: {input_data}")
+            
+            # Execute the sub-agent
+            result = await self.traced_runner.run(
+                agent=sub_agent,
+                prompt=input_data,
+                session_id=f"sub_agent_{sub_config.id}",
+                user_id="sub_agent_execution"
+            )
+            
+            logger.info(f"📊 Sub-agent execution result: success={result.success}")
+            if result.success:
+                logger.info(f"✅ Sub-agent response: {result.response[:100]}...")
+                return result.response
+            else:
+                logger.error(f"❌ Sub-agent execution failed: {result.error}")
+                return f"Sub-agent execution failed: {result.error}"
+                
+        except Exception as e:
+            logger.error(f"❌ Error in sub-agent execution: {e}")
+            logger.error(f"📋 Sub-agent execution error details: {traceback.format_exc()}")
+            return f"Sub-agent execution error: {str(e)}"
+    
+    async def create_agent(self, config: AgentConfiguration) -> Optional[Any]:
         """Create an agent from configuration"""
         if config.agent_type == AgentType.LLM:
-            return self.create_llm_agent(config)
+            return await self.create_llm_agent(config)
         else:
             print(f"Unsupported agent type: {config.agent_type}")
             return None
@@ -758,6 +1104,11 @@ class ADKService:
                     return False
                 
                 self.tools[tool_def.id] = adk_tool
+                return True
+            elif tool_def.tool_type == ToolType.MCP:
+                # Handle MCP tools - store the tool definition for async creation
+                self.tools[tool_def.id] = tool_def
+                logger.info(f"📋 MCP tool '{tool_def.name}' registered for async creation")
                 return True
             else:
                 # Store the tool definition for non-function tools
@@ -804,6 +1155,11 @@ class ADKService:
         logger.info(f"🔍 Checking for agent {agent_id} in memory...")
         logger.info(f"📊 Available agents in memory: {list(self.agents.keys())}")
         
+        # Force reload agent from database to get latest code changes
+        if agent_id in self.agents:
+            logger.info(f"🔄 Force reloading agent {agent_id} from database to get latest changes...")
+            del self.agents[agent_id]
+        
         if agent_id not in self.agents:
             logger.info(f"⚠️ Agent {agent_id} not found in memory, checking database...")
             if self.db_manager:
@@ -814,7 +1170,7 @@ class ADKService:
                 if agent_data:
                     # Create the agent from database data
                     logger.info(f"🔧 Creating agent from database data...")
-                    agent = self.create_llm_agent(AgentConfiguration(**agent_data))
+                    agent = await self.create_llm_agent(AgentConfiguration(**agent_data))
                     if agent:
                         self.agents[agent_id] = agent
                         logger.info(f"✅ Successfully created and cached agent {agent_id}")
@@ -857,6 +1213,9 @@ class ADKService:
             # Log agent details
             logger.info(f"🤖 Agent details: {type(agent).__name__}")
             logger.info(f"🔧 Agent tools: {getattr(agent, 'tools', 'No tools')}")
+            
+            # Convert MCP tools before execution
+            await self._convert_mcp_tools_for_agent(agent)
             
             # Use traced runner if available, otherwise fall back to regular runner
             if self.traced_runner:
@@ -1034,6 +1393,9 @@ class ADKService:
     
     def clear_session(self, session_id: str) -> bool:
         """Clear a chat session"""
+
+        
+
         if session_id in self.sessions:
             del self.sessions[session_id]
             return True

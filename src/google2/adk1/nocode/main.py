@@ -23,6 +23,7 @@ from .models import (
     ChatMessage, ChatSession, AgentExecutionResult, ProjectConfiguration,
     LoginRequest, RegisterRequest, AuthResponse
 )
+from .embed_models import EmbedRequest, AgentEmbed
 from .adk_service import ADKService
 from .database import DatabaseManager
 from .firestore_manager import FirestoreManager
@@ -200,6 +201,63 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# URL Whitelisting middleware for embed security
+@app.middleware("http")
+async def url_whitelist_middleware(request: Request, call_next):
+    """Middleware to enforce URL whitelisting for embed endpoints"""
+    # Only apply whitelisting to embed endpoints
+    if request.url.path.startswith("/embed/"):
+        # Extract embed ID from path
+        embed_id = request.url.path.split("/embed/")[1].split("/")[0]
+        
+        # Get whitelisted URLs from database
+        try:
+            embed_config = await db_manager.get_embed_config(embed_id)
+            if embed_config:
+                # Get the origin of the request
+                origin = request.headers.get("origin") or request.headers.get("referer")
+                if origin:
+                    # Parse origin to get the base URL
+                    from urllib.parse import urlparse
+                    parsed_origin = urlparse(origin)
+                    origin_base = f"{parsed_origin.scheme}://{parsed_origin.netloc}"
+                    
+                    # Check if origin is whitelisted
+                    whitelisted_urls = [embed_config["system_url"]] + embed_config.get("additional_urls", [])
+                    
+                    is_allowed = False
+                    for whitelisted_url in whitelisted_urls:
+                        if embed_config.get("strict_whitelist", False):
+                            # Strict matching - exact URL match
+                            if origin_base == whitelisted_url.rstrip("/"):
+                                is_allowed = True
+                                break
+                        else:
+                            # Flexible matching - allow subdomains and paths
+                            if origin_base.startswith(whitelisted_url.rstrip("/")) or whitelisted_url.rstrip("/").startswith(origin_base):
+                                is_allowed = True
+                                break
+                    
+                    if not is_allowed:
+                        return JSONResponse(
+                            status_code=403,
+                            content={
+                                "error": "Access denied",
+                                "message": f"Origin '{origin_base}' is not whitelisted for this embed",
+                                "whitelisted_urls": whitelisted_urls
+                            }
+                        )
+                else:
+                    # No origin header - might be a direct request
+                    # Allow for now but log the event
+                    print(f"⚠️ Embed request without origin header: {request.url.path}")
+        except Exception as e:
+            print(f"⚠️ Error checking embed whitelist: {e}")
+            # Allow request to proceed if there's an error checking whitelist
+    
+    response = await call_next(request)
+    return response
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=str(current_dir / "static")), name="static")
@@ -437,6 +495,11 @@ async def get_current_user(session_token: str):
 async def create_tool(tool: ToolDefinition):
     """Create a new tool"""
     try:
+        logger.info(f"🔧 Received tool data: {tool}")
+        logger.info(f"🔧 Tool mcp_config: {tool.mcp_config}")
+        logger.info(f"🔧 Tool type: {tool.tool_type}")
+        logger.info(f"🔧 Tool dict: {tool.__dict__}")
+        
         # Validate required fields
         if not tool.name or not tool.name.strip():
             raise HTTPException(status_code=400, detail="Tool name is required")
@@ -456,14 +519,17 @@ async def create_tool(tool: ToolDefinition):
         adk_registration_success = adk_service.register_tool(tool)
         
         # Save to database (required)
-        tool_data = tool.model_dump()
+        tool_data = tool.model_dump(exclude_none=False)
+        logger.info(f"🔧 Tool data being saved: {tool_data}")
+        logger.info(f"🔧 Tool mcp_config from model: {tool.mcp_config}")
+        logger.info(f"🔧 Tool mcp_config from dump: {tool_data.get('mcp_config')}")
         if db_manager.save_tool(tool_data):
             # Return success even if ADK registration failed
             if not adk_registration_success:
                 logger.warning(f"Tool {tool.name} saved to database but ADK registration failed")
             else:
                 logger.info(f"Created tool: {tool.name} (ID: {tool.id})")
-            return {"success": True, "tool": tool_data}
+            return {"success": True, "tool": tool_data, "debug_mcp_config": tool.mcp_config}
         else:
             raise HTTPException(status_code=500, detail="Failed to save tool to database")
             
@@ -2098,10 +2164,30 @@ if __name__ == "__main__":
 
 
 # Agent Embedding Endpoints
-@app.post("/api/agents/{agent_id}/embed")
-async def create_agent_embed(agent_id: str):
-    """Create an embeddable version of an agent"""
+@app.post("/api/agents/{agent_id}/embed/debug")
+async def debug_embed_request(agent_id: str, request: Request):
+    """Debug endpoint to see raw request data"""
     try:
+        body = await request.body()
+        logger.info(f"Raw request body for agent {agent_id}: {body}")
+        
+        try:
+            json_data = await request.json()
+            logger.info(f"Parsed JSON data: {json_data}")
+            return {"debug": "ok", "data": json_data}
+        except Exception as e:
+            logger.error(f"JSON parsing error: {e}")
+            return {"debug": "json_error", "error": str(e)}
+    except Exception as e:
+        logger.error(f"Debug endpoint error: {e}")
+        return {"debug": "error", "error": str(e)}
+
+@app.post("/api/agents/{agent_id}/embed")
+async def create_agent_embed(agent_id: str, request: Request, embed_request: EmbedRequest):
+    """Create an embeddable version of an agent with configuration"""
+    try:
+        logger.info(f"Creating embed for agent {agent_id}")
+        logger.info(f"Embed request data: {embed_request.model_dump()}")
         # Validate agent_id
         if not agent_id or not agent_id.strip():
             raise HTTPException(status_code=400, detail="Agent ID cannot be empty")
@@ -2117,7 +2203,7 @@ async def create_agent_embed(agent_id: str):
         # Generate unique embed ID
         embed_id = f"embed_{agent_id}_{uuid.uuid4().hex[:8]}"
         
-        # Create embed configuration
+        # Create embed configuration with all the form data
         embed_config = {
             "embed_id": embed_id,
             "agent_id": agent_id,
@@ -2125,7 +2211,16 @@ async def create_agent_embed(agent_id: str):
             "created_at": datetime.now().isoformat(),
             "is_active": True,
             "access_count": 0,
-            "last_accessed": None
+            "last_accessed": None,
+            # Embed configuration from form
+            "purpose": embed_request.purpose,
+            "custom_purpose": embed_request.custom_purpose or "",
+            "environment": embed_request.environment,
+            "requests_per_hour": embed_request.requests_per_hour,
+            "payload_size": embed_request.payload_size,
+            "system_url": embed_request.system_url,
+            "additional_urls": embed_request.additional_urls,
+            "strict_whitelist": embed_request.strict_whitelist
         }
         
         # Save embed configuration to database
@@ -2145,11 +2240,55 @@ async def create_agent_embed(agent_id: str):
             "message": "Agent embed created successfully"
         }
         
+    except ValidationError as e:
+        logger.error(f"Validation error creating agent embed: {e}")
+        raise HTTPException(status_code=422, detail=f"Invalid embed request: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error creating agent embed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create agent embed: {str(e)}")
+
+
+@app.get("/embed/{embed_id}")
+async def serve_embed_page(embed_id: str):
+    """Serve the embed page for an agent"""
+    try:
+        # Validate embed_id
+        if not embed_id or not embed_id.strip():
+            raise HTTPException(status_code=400, detail="Embed ID cannot be empty")
+        
+        embed_config = db_manager.get_agent_embed(embed_id.strip())
+        if not embed_config:
+            raise HTTPException(status_code=404, detail="Embed not found")
+        
+        if not embed_config.get('is_active', False):
+            raise HTTPException(status_code=410, detail="Embed is no longer active")
+        
+        agent = db_manager.get_agent(embed_config['agent_id'])
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if agent is enabled
+        if not agent.get('is_enabled', True):
+            raise HTTPException(status_code=400, detail="Agent is disabled")
+        
+        # Update access count
+        db_manager.update_embed_access(embed_id, {
+            "access_count": embed_config.get('access_count', 0) + 1,
+            "last_accessed": datetime.now().isoformat()
+        })
+        
+        # Generate embed HTML page
+        embed_html = generate_embed_page_html(agent, embed_config)
+        
+        return HTMLResponse(content=embed_html)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving embed page: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to serve embed page: {str(e)}")
 
 
 @app.get("/api/embed/{embed_id}")
@@ -2264,6 +2403,17 @@ async def list_agent_embeds(agent_id: str):
         raise
     except Exception as e:
         logger.error(f"Error listing embeds for agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list embeds: {str(e)}")
+
+
+@app.get("/api/embeds")
+async def list_all_embeds():
+    """List all embeds across all agents"""
+    try:
+        embeds = db_manager.get_all_embeds()
+        return {"embeds": embeds, "count": len(embeds)}
+    except Exception as e:
+        logger.error(f"Error listing all embeds: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list embeds: {str(e)}")
 
 
@@ -2391,6 +2541,317 @@ def generate_embed_html(agent: dict, embed_id: str) -> str:
  </script>'''
 
 
+
+
+def generate_embed_page_html(agent: dict, embed_config: dict) -> str:
+    """Generate HTML page for embedded agent"""
+    embed_id = embed_config['embed_id']
+    agent_name = agent['name']
+    
+    html_content = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{agent_name} - AI Agent</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        
+        .embed-container {{
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            width: 100%;
+            max-width: 500px;
+            height: 600px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }}
+        
+        .embed-header {{
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }}
+        
+        .embed-header h1 {{
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }}
+        
+        .embed-header p {{
+            font-size: 14px;
+            opacity: 0.9;
+        }}
+        
+        .chat-container {{
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }}
+        
+        .chat-messages {{
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }}
+        
+        .message {{
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }}
+        
+        .message.user {{
+            background: #3b82f6;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }}
+        
+        .message.assistant {{
+            background: #e2e8f0;
+            color: #1e293b;
+            border-bottom-left-radius: 4px;
+        }}
+        
+        .message.system {{
+            background: #fef3c7;
+            color: #92400e;
+            text-align: center;
+            margin: 0 auto;
+            font-size: 14px;
+        }}
+        
+        .input-container {{
+            display: flex;
+            gap: 10px;
+        }}
+        
+        .chat-input {{
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }}
+        
+        .chat-input:focus {{
+            border-color: #3b82f6;
+        }}
+        
+        .send-button {{
+            padding: 12px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }}
+        
+        .send-button:hover {{
+            background: #2563eb;
+        }}
+        
+        .send-button:disabled {{
+            background: #9ca3af;
+            cursor: not-allowed;
+        }}
+        
+        .typing-indicator {{
+            display: none;
+            padding: 12px 16px;
+            color: #6b7280;
+            font-style: italic;
+        }}
+        
+        .typing-indicator.show {{
+            display: block;
+        }}
+        
+        .error-message {{
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #fecaca;
+        }}
+        
+        @media (max-width: 480px) {{
+            .embed-container {{
+                height: 100vh;
+                border-radius: 0;
+            }}
+            
+            .embed-header {{
+                padding: 15px;
+            }}
+            
+            .embed-header h1 {{
+                font-size: 20px;
+            }}
+            
+            .chat-container {{
+                padding: 15px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="embed-container">
+        <div class="embed-header">
+            <h1>{agent_name}</h1>
+            <p>AI Assistant</p>
+        </div>
+        
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    👋 Hello! I'm {agent_name}, your AI assistant. How can I help you today?
+                </div>
+            </div>
+            
+            <div class="typing-indicator" id="typingIndicator">
+                {agent_name} is typing...
+            </div>
+            
+            <div class="input-container">
+                <input type="text" id="chatInput" class="chat-input" placeholder="Type your message..." autocomplete="off">
+                <button id="sendButton" class="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const embedId = '{embed_id}';
+        const agentName = '{agent_name}';
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        let isTyping = false;
+        
+        // Add message to chat
+        function addMessage(content, type) {{
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${{type}}`;
+            messageDiv.textContent = content;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }}
+        
+        // Show typing indicator
+        function showTyping() {{
+            if (!isTyping) {{
+                isTyping = true;
+                typingIndicator.classList.add('show');
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }}
+        }}
+        
+        // Hide typing indicator
+        function hideTyping() {{
+            isTyping = false;
+            typingIndicator.classList.remove('show');
+        }}
+        
+        // Send message
+        async function sendMessage() {{
+            const message = chatInput.value.trim();
+            if (!message) return;
+            
+            // Add user message
+            addMessage(message, 'user');
+            chatInput.value = '';
+            
+            // Disable input
+            chatInput.disabled = true;
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+            
+            // Show typing indicator
+            showTyping();
+            
+            try {{
+                const response = await fetch(`/api/embed/${{embedId}}/chat`, {{
+                    method: 'POST',
+                    headers: {{
+                        'Content-Type': 'application/json',
+                    }},
+                    body: JSON.stringify({{
+                        message: message,
+                        embed_id: embedId
+                    }})
+                }});
+                
+                const data = await response.json();
+                
+                hideTyping();
+                
+                if (response.ok) {{
+                    addMessage(data.response, 'assistant');
+                }} else {{
+                    addMessage(`Error: ${{data.detail || 'Something went wrong'}}`, 'system');
+                }}
+            }} catch (error) {{
+                hideTyping();
+                addMessage(`Error: ${{error.message}}`, 'system');
+            }} finally {{
+                // Re-enable input
+                chatInput.disabled = false;
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
+                chatInput.focus();
+            }}
+        }}
+        
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', function(e) {{
+            if (e.key === 'Enter' && !e.shiftKey) {{
+                e.preventDefault();
+                sendMessage();
+            }}
+        }});
+        
+        // Focus input on load
+        chatInput.focus();
+    </script>
+</body>
+</html>'''
+    
+    return html_content
 
 
 def generate_embedded_agent_html(agent: dict, embed_id: str) -> str:

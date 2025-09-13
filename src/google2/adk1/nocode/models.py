@@ -41,6 +41,16 @@ class UserSession(BaseModel):
     ip_address: Optional[str] = Field(None, description="IP address of the session")
 
 
+class ModelProvider(str, Enum):
+    """Supported model providers"""
+    GOOGLE = "google"
+    OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
+    ANTHROPIC = "anthropic"
+    COHERE = "cohere"
+    MISTRAL = "mistral"
+    OLLAMA = "ollama"
+
 class AgentType(str, Enum):
     """Types of agents available in the platform"""
     LLM = "llm"
@@ -58,6 +68,12 @@ class ToolDefinition(BaseModel):
     description: str = Field(..., description="Description of what the tool does")
     tool_type: ToolType = Field(..., description="Type of the tool")
     
+    class Config:
+        # Include all fields in model_dump, even if they are None
+        exclude_none = False
+        # Use dict instead of exclude_none for older Pydantic versions
+        use_enum_values = True
+    
     # For function tools
     function_code: Optional[str] = Field(None, description="Python code for custom function tools")
     parameters: Optional[Dict[str, Any]] = Field(None, description="Parameters for the tool")
@@ -67,6 +83,12 @@ class ToolDefinition(BaseModel):
     
     # For external tools
     external_config: Optional[Dict[str, Any]] = Field(None, description="Configuration for external tools")
+    
+    # For MCP tools
+    mcp_config: Optional[Dict[str, Any]] = Field(None, description="Configuration for MCP server connection")
+    mcp_server_config: Optional[Dict[str, Any]] = Field(None, description="Alternative MCP server configuration")
+    test_field: Optional[str] = Field(None, description="Test field")
+    mcp_configuration: Optional[Dict[str, Any]] = Field(None, description="MCP configuration alternative")
     
     # Metadata
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
@@ -86,6 +108,13 @@ class ToolDefinition(BaseModel):
                 compile(v, '<string>', 'exec')
             except SyntaxError as e:
                 raise ValueError(f"Invalid Python code: {e}")
+        return v
+    
+    @validator('mcp_config')
+    def validate_mcp_config(cls, v, values):
+        # If this is an MCP tool, mcp_config is required
+        if values.get('tool_type') == ToolType.MCP and not v:
+            raise ValueError("mcp_config is required for MCP tools")
         return v
 
 
@@ -133,6 +162,7 @@ class AgentCreateRequest(BaseModel):
     tools: List[str] = Field(default_factory=list, description="List of tool IDs this agent can use")
     
     # Model configuration
+    model_provider: ModelProvider = Field(default=ModelProvider.GOOGLE, description="Model provider to use")
     model_settings: Dict[str, Any] = Field(
         default_factory=lambda: {
             "model": "gemini-1.5-pro",
@@ -179,6 +209,7 @@ class AgentConfiguration(BaseModel):
     tools: List[str] = Field(default_factory=list, description="List of tool IDs this agent can use")
     
     # Model configuration
+    model_provider: ModelProvider = Field(default=ModelProvider.GOOGLE, description="Model provider to use")
     model_settings: Dict[str, Any] = Field(
         default_factory=lambda: {
             "model": "gemini-1.5-pro",
@@ -303,6 +334,7 @@ class AgentUpdateRequest(BaseModel):
     tools: List[str] = Field(default_factory=list, description="List of tool IDs this agent can use")
     
     # Model configuration
+    model_provider: ModelProvider = Field(default=ModelProvider.GOOGLE, description="Model provider to use")
     model_settings: Dict[str, Any] = Field(
         default_factory=lambda: {
             "model": "gemini-1.5-pro",

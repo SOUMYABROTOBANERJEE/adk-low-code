@@ -9,6 +9,7 @@ class AgentGeniePlatform {
         this.agents = [];
         this.tools = [];
         this.projects = [];
+        this.embeds = [];
         
         this.init();
     }
@@ -72,20 +73,49 @@ class AgentGeniePlatform {
         document.getElementById('agentConfigForm')?.addEventListener('submit', (e) => this.handleAgentSubmit(e));
         document.getElementById('cancelAgentBtn')?.addEventListener('click', () => this.hideModal('agentModal'));
         
+        // Add validation for agent name
+        const agentNameInput = document.getElementById('agentName');
+        if (agentNameInput) {
+            agentNameInput.addEventListener('input', (e) => this.validateIdentifierName(e.target, 'Agent name'));
+        }
+        
         // Tool creation
         document.getElementById('toolForm')?.addEventListener('submit', (e) => this.handleToolSubmit(e));
         document.getElementById('cancelToolBtn')?.addEventListener('click', () => this.hideModal('toolModal'));
         document.getElementById('toolType')?.addEventListener('change', (e) => this.handleToolTypeChange(e));
+        
+        // Add validation for tool name
+        const toolNameInput = document.getElementById('toolName');
+        if (toolNameInput) {
+            toolNameInput.addEventListener('input', (e) => this.validateIdentifierName(e.target, 'Tool name'));
+        }
+        
+        // Tool editing
+        document.getElementById('editToolForm')?.addEventListener('submit', (e) => this.handleEditToolSubmit(e));
+        document.getElementById('cancelEditToolBtn')?.addEventListener('click', () => this.hideModal('editToolModal'));
+        
+        // Add validation for edit tool name
+        const editToolNameInput = document.getElementById('editToolName');
+        if (editToolNameInput) {
+            editToolNameInput.addEventListener('input', (e) => this.validateIdentifierName(e.target, 'Tool name'));
+        }
         
         // Project creation
         document.getElementById('projectForm')?.addEventListener('submit', (e) => this.handleProjectSubmit(e));
         document.getElementById('cancelProjectBtn')?.addEventListener('click', () => this.hideModal('projectModal'));
         
         // Sub-agent management
-        document.getElementById('addSubAgentBtn')?.addEventListener('click', () => this.showModal('subAgentModal'));
-        document.getElementById('addExistingAsSubBtn')?.addEventListener('click', () => this.showModal('linkExistingAgentModal'));
+        document.getElementById('addSubAgentBtn')?.addEventListener('click', () => {
+            console.log("🔧 Add Sub-Agent button clicked");
+            this.showModal('subAgentModal');
+        });
+        document.getElementById('addExistingAsSubBtn')?.addEventListener('click', async () => {
+            console.log("🔧 Link Existing Agent button clicked");
+            await this.populateExistingAgentSelect();
+            this.showModal('linkExistingAgentModal');
+        });
         document.getElementById('subAgentForm')?.addEventListener('submit', (e) => this.handleSubAgentSubmit(e));
-        document.getElementById('linkExistingAgentForm')?.addEventListener('click', (e) => this.handleLinkExistingAgentSubmit(e));
+        document.getElementById('linkExistingAgentForm')?.addEventListener('submit', (e) => this.handleLinkExistingAgentSubmit(e));
         document.getElementById('cancelSubAgentBtn')?.addEventListener('click', () => this.hideModal('subAgentModal'));
         document.getElementById('cancelLinkExistingBtn')?.addEventListener('click', () => this.hideModal('linkExistingAgentModal'));
         document.getElementById('parentAgentSelect')?.addEventListener('change', (e) => this.onParentAgentChange(e));
@@ -388,7 +418,8 @@ class AgentGeniePlatform {
             await Promise.all([
                 this.loadAgents(),
                 this.loadTools(),
-                this.loadProjects()
+                this.loadProjects(),
+                this.loadEmbeds()
             ]);
             this.updateDashboardStats();
             this.updateUserDisplay();
@@ -918,11 +949,13 @@ class AgentGeniePlatform {
         const toolCount = document.getElementById('toolCount');
         const projectCount = document.getElementById('projectCount');
         const chatCount = document.getElementById('chatCount');
+        const embedCount = document.getElementById('embedCount');
         
         if (agentCount) agentCount.textContent = this.agents.length;
         if (toolCount) toolCount.textContent = this.tools.length;
         if (projectCount) projectCount.textContent = this.projects.length;
         if (chatCount) chatCount.textContent = '0'; // Could be enhanced to show actual chat sessions
+        if (embedCount) embedCount.textContent = this.embeds.length;
         
         // Update recent agents and tools sections
         this.updateRecentAgents();
@@ -1123,6 +1156,16 @@ class AgentGeniePlatform {
             this.projects = data.projects || [];
         } catch (error) {
             console.error('Error loading projects:', error);
+        }
+    }
+    
+    async loadEmbeds() {
+        try {
+            const response = await fetch('/api/embeds');
+            const data = await response.json();
+            this.embeds = data.embeds || [];
+        } catch (error) {
+            console.error('Error loading embeds:', error);
         }
     }
     
@@ -1401,6 +1444,7 @@ class AgentGeniePlatform {
             agent_type: formData.get('agentType'),
             system_prompt: formData.get('agentSystemPrompt'),
             instructions: formData.get('agentInstructions') || '',
+            model_provider: document.getElementById('agentModelProvider')?.value || 'google',
             model_settings: {
                 model: document.getElementById('agentModel')?.value || 'gemini-2.0-flash',
                 temperature: parseFloat(document.getElementById('agentTemperature')?.value || '0.7'),
@@ -1476,6 +1520,42 @@ class AgentGeniePlatform {
             tags: []
         };
         
+        // Add MCP configuration if tool type is MCP
+        if (toolType === 'mcp') {
+            const mcpCommand = document.getElementById('mcpCommand').value;
+            const mcpTimeout = parseInt(document.getElementById('mcpTimeout').value) || 300;
+            const mcpArgsText = document.getElementById('mcpArgs').value;
+            const mcpEnvText = document.getElementById('mcpEnv').value;
+            
+            // Parse arguments (split by newlines)
+            const mcpArgs = mcpArgsText.split('\n').filter(arg => arg.trim());
+            
+            // Parse environment variables (JSON)
+            let mcpEnv = {};
+            try {
+                if (mcpEnvText.trim()) {
+                    mcpEnv = JSON.parse(mcpEnvText);
+                    // Validate that all values are strings
+                    for (const [key, value] of Object.entries(mcpEnv)) {
+                        if (typeof value !== 'string') {
+                            this.showMessage(`Environment variable "${key}" must be a string value`, 'error');
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                this.showMessage(`Invalid JSON format for environment variables: ${e.message}`, 'error');
+                return;
+            }
+            
+            toolData.mcp_config = {
+                command: mcpCommand,
+                args: mcpArgs,
+                env: mcpEnv,
+                timeout: mcpTimeout
+            };
+        }
+        
         try {
             this.showLoading(true);
             const response = await fetch('/api/tools', {
@@ -1541,12 +1621,450 @@ class AgentGeniePlatform {
     
     handleToolTypeChange(e) {
         const functionSection = document.getElementById('functionCodeSection');
+        const mcpSection = document.getElementById('mcpConfigSection');
+        
         if (functionSection) {
             if (e.target.value === 'function') {
                 functionSection.classList.remove('hidden');
             } else {
                 functionSection.classList.add('hidden');
             }
+        }
+        
+        if (mcpSection) {
+            if (e.target.value === 'mcp') {
+                mcpSection.classList.remove('hidden');
+            } else {
+                mcpSection.classList.add('hidden');
+            }
+        }
+    }
+    
+    loadEnvTemplate(templateType) {
+        const envTextarea = document.getElementById('mcpEnv');
+        if (!envTextarea) return;
+        
+        const templates = {
+            aws: {
+                "AWS_ACCESS_KEY_ID": "your_access_key_here",
+                "AWS_SECRET_ACCESS_KEY": "your_secret_key_here",
+                "AWS_REGION": "us-east-1",
+                "AWS_SESSION_TOKEN": "your_session_token_here",
+                "NODE_ENV": "production"
+            },
+            github: {
+                "GITHUB_TOKEN": "your_github_token_here",
+                "GITHUB_API_URL": "https://api.github.com",
+                "GITHUB_OWNER": "your_username",
+                "NODE_ENV": "production"
+            },
+            database: {
+                "DATABASE_URL": "postgresql://user:password@localhost:5432/dbname",
+                "DB_HOST": "localhost",
+                "DB_PORT": "5432",
+                "DB_NAME": "your_database",
+                "DB_USER": "your_username",
+                "DB_PASSWORD": "your_password",
+                "NODE_ENV": "production"
+            }
+        };
+        
+        const template = templates[templateType];
+        if (template) {
+            envTextarea.value = JSON.stringify(template, null, 2);
+            this.showMessage(`${templateType.toUpperCase()} template loaded`, 'success');
+        }
+    }
+    
+    clearEnvTemplate() {
+        const envTextarea = document.getElementById('mcpEnv');
+        if (envTextarea) {
+            envTextarea.value = '';
+            this.showMessage('Environment variables cleared', 'info');
+        }
+    }
+    
+    handleModelProviderChange() {
+        const providerSelect = document.getElementById('agentModelProvider');
+        const modelSelect = document.getElementById('agentModel');
+        
+        if (!providerSelect || !modelSelect) return;
+        
+        const provider = providerSelect.value;
+        
+        // Clear existing options
+        modelSelect.innerHTML = '';
+        
+        // Define models for each provider
+        const models = {
+            google: [
+                { value: 'gemini-2.0-flash', text: 'Gemini 2.0 Flash' },
+                { value: 'gemini-1.5-pro', text: 'Gemini 1.5 Pro' },
+                { value: 'gemini-1.5-flash', text: 'Gemini 1.5 Flash' },
+                { value: 'gemini-pro', text: 'Gemini Pro' }
+            ],
+            openai: [
+                { value: 'gpt-4o', text: 'GPT-4o' },
+                { value: 'gpt-4o-mini', text: 'GPT-4o Mini' },
+                { value: 'gpt-4-turbo', text: 'GPT-4 Turbo' },
+                { value: 'gpt-3.5-turbo', text: 'GPT-3.5 Turbo' }
+            ],
+            azure_openai: [
+                { value: 'gpt-4o', text: 'GPT-4o' },
+                { value: 'gpt-4o-mini', text: 'GPT-4o Mini' },
+                { value: 'gpt-4-turbo', text: 'GPT-4 Turbo' },
+                { value: 'gpt-3.5-turbo', text: 'GPT-3.5 Turbo' }
+            ],
+            anthropic: [
+                { value: 'claude-3-5-sonnet-20241022', text: 'Claude 3.5 Sonnet' },
+                { value: 'claude-3-opus-20240229', text: 'Claude 3 Opus' },
+                { value: 'claude-3-sonnet-20240229', text: 'Claude 3 Sonnet' },
+                { value: 'claude-3-haiku-20240307', text: 'Claude 3 Haiku' }
+            ],
+            cohere: [
+                { value: 'command-r-plus', text: 'Command R+' },
+                { value: 'command-r', text: 'Command R' },
+                { value: 'command', text: 'Command' }
+            ],
+            mistral: [
+                { value: 'mistral-large', text: 'Mistral Large' },
+                { value: 'mistral-medium', text: 'Mistral Medium' },
+                { value: 'mistral-small', text: 'Mistral Small' }
+            ],
+            ollama: [
+                { value: 'llama3.1', text: 'Llama 3.1' },
+                { value: 'llama3.1:8b', text: 'Llama 3.1 8B' },
+                { value: 'llama3.1:70b', text: 'Llama 3.1 70B' },
+                { value: 'codellama', text: 'Code Llama' }
+            ]
+        };
+        
+        // Add models for selected provider
+        const providerModels = models[provider] || [];
+        providerModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.value;
+            option.textContent = model.text;
+            modelSelect.appendChild(option);
+        });
+        
+        // Set default model
+        if (providerModels.length > 0) {
+            modelSelect.value = providerModels[0].value;
+        }
+    }
+    
+    openEmbedCreationModal() {
+        console.log("🔍 openEmbedCreationModal called - showing validation form");
+        const modal = document.getElementById('embedCreationModal');
+        const agentNameSpan = document.getElementById('embedAgentName');
+        
+        if (!modal || !agentNameSpan) {
+            console.error("❌ Modal or agentNameSpan not found", {modal, agentNameSpan});
+            return;
+        }
+        
+        // Set the agent name
+        let agentName = document.getElementById('agentName')?.value || 'Untitled Agent';
+        
+        // If currentAgent is set directly (from embed management), use that
+        if (this.currentAgent && this.currentAgent.name) {
+            agentName = this.currentAgent.name;
+        }
+        
+        agentNameSpan.textContent = agentName;
+        
+        // Reset form
+        document.getElementById('embedCreationForm').reset();
+        document.getElementById('customPurposeSection').classList.add('hidden');
+        
+        // Show modal
+        modal.classList.remove('hidden');
+    }
+    
+    closeEmbedCreationModal() {
+        const modal = document.getElementById('embedCreationModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+    
+    handlePurposeChange(e) {
+        const customSection = document.getElementById('customPurposeSection');
+        if (e.target.value === 'other') {
+            customSection.classList.remove('hidden');
+        } else {
+            customSection.classList.add('hidden');
+        }
+    }
+    
+    addAdditionalUrl() {
+        const container = document.getElementById('additionalUrlsContainer');
+        if (!container) return;
+        
+        const urlDiv = document.createElement('div');
+        urlDiv.className = 'flex items-center space-x-2';
+        urlDiv.innerHTML = `
+            <input type="url" name="additionalUrl" class="flex-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://subdomain.example.com">
+            <button type="button" onclick="app.removeAdditionalUrl(this)" class="px-3 py-2 text-red-600 hover:text-red-800">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        container.appendChild(urlDiv);
+    }
+    
+    removeAdditionalUrl(button) {
+        button.parentElement.remove();
+    }
+    
+    async handleEmbedCreationSubmit() {
+        console.log("🚀 handleEmbedCreationSubmit called - processing form data");
+        const form = document.getElementById('embedCreationForm');
+        const formData = new FormData(form);
+        
+        // Validate required fields
+        const requiredFields = ['embedPurpose', 'embedEnvironment', 'embedRequestsPerHour', 'embedPayloadSize', 'embedSystemUrl'];
+        for (const field of requiredFields) {
+            if (!formData.get(field)) {
+                this.showMessage(`Please fill in the ${field.replace('embed', '').replace(/([A-Z])/g, ' $1').toLowerCase()}`, 'error');
+                return;
+            }
+        }
+        
+        // Collect additional URLs
+        const additionalUrls = Array.from(document.querySelectorAll('input[name="additionalUrl"]'))
+            .map(input => input.value.trim())
+            .filter(url => url);
+        
+        // Prepare embed configuration (using backend expected field names)
+        const embedConfig = {
+            agent_name: document.getElementById('agentName')?.value || 'Untitled Agent',
+            purpose: formData.get('embedPurpose'),
+            custom_purpose: formData.get('customPurposeText') || '',
+            environment: formData.get('embedEnvironment'),
+            requests_per_hour: formData.get('embedRequestsPerHour'),
+            payload_size: formData.get('embedPayloadSize'),
+            system_url: formData.get('embedSystemUrl'),
+            additional_urls: additionalUrls,
+            strict_whitelist: formData.get('embedStrictWhitelist') === 'on'
+        };
+        
+        try {
+            this.showLoading(true);
+            
+            // Get current agent ID
+            let agentId = this.currentAgent?.id;
+            
+            // Fallback to form-based agent ID if currentAgent not set
+            if (!agentId) {
+                agentId = document.getElementById('agentId')?.value;
+            }
+            
+            if (!agentId) {
+                this.showMessage('No agent selected for embedding', 'error');
+                return;
+            }
+            
+            // Send embed configuration to backend
+            const response = await fetch(`/api/agents/${agentId}/embed`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(embedConfig)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                // Close modal
+                this.closeEmbedCreationModal();
+                
+                // Reload global embeds count
+                await this.loadEmbeds();
+                this.updateDashboardStats();
+                
+                // If we're in embed management context, reload the embeds list
+                if (this.currentAgent?.id) {
+                    this.loadAgentEmbeds(this.currentAgent.id);
+                }
+                
+                // Show embed code in the original container
+                this.showEmbedCode(data.embed_code);
+                
+                this.showMessage('Embed code generated successfully!', 'success');
+            } else {
+                this.showMessage(data.detail || 'Failed to generate embed code', 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error generating embed:', error);
+            this.showMessage('Failed to generate embed code', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+    
+    showEmbedCode(embedCode) {
+        const container = document.getElementById('embedCodeContainer');
+        const textarea = document.getElementById('embedCode');
+        
+        if (container && textarea) {
+            textarea.value = embedCode;
+            container.classList.remove('hidden');
+        }
+    }
+    
+    handleEditToolTypeChange(e) {
+        const functionSection = document.getElementById('editFunctionCodeSection');
+        const mcpSection = document.getElementById('editMcpConfigSection');
+        
+        if (functionSection && mcpSection) {
+            if (e.target.value === 'function') {
+                functionSection.classList.remove('hidden');
+                mcpSection.classList.add('hidden');
+            } else if (e.target.value === 'mcp') {
+                functionSection.classList.add('hidden');
+                mcpSection.classList.remove('hidden');
+            } else {
+                functionSection.classList.add('hidden');
+                mcpSection.classList.add('hidden');
+            }
+        }
+    }
+    
+    loadEditEnvTemplate(templateType) {
+        const envTextarea = document.getElementById('editMcpEnv');
+        if (!envTextarea) return;
+        
+        const templates = {
+            aws: {
+                "AWS_ACCESS_KEY_ID": "your_access_key_here",
+                "AWS_SECRET_ACCESS_KEY": "your_secret_key_here",
+                "AWS_REGION": "us-east-1",
+                "AWS_SESSION_TOKEN": "your_session_token_here",
+                "NODE_ENV": "production"
+            },
+            github: {
+                "GITHUB_TOKEN": "your_github_token_here",
+                "GITHUB_API_URL": "https://api.github.com",
+                "GITHUB_OWNER": "your_username",
+                "NODE_ENV": "production"
+            },
+            database: {
+                "DATABASE_URL": "postgresql://user:password@localhost:5432/dbname",
+                "DB_HOST": "localhost",
+                "DB_PORT": "5432",
+                "DB_NAME": "your_database",
+                "DB_USER": "your_username",
+                "DB_PASSWORD": "your_password",
+                "NODE_ENV": "production"
+            }
+        };
+        
+        const template = templates[templateType];
+        if (template) {
+            envTextarea.value = JSON.stringify(template, null, 2);
+            this.showMessage(`${templateType.toUpperCase()} template loaded`, 'success');
+        }
+    }
+    
+    clearEditEnvTemplate() {
+        const envTextarea = document.getElementById('editMcpEnv');
+        if (envTextarea) {
+            envTextarea.value = '';
+            this.showMessage('Environment variables cleared', 'info');
+        }
+    }
+    
+    async handleEditToolSubmit(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        
+        const toolId = formData.get('editToolId');
+        const toolData = {
+            id: toolId,
+            name: formData.get('editToolName'),
+            description: formData.get('editToolDescription'),
+            tool_type: formData.get('editToolType')
+        };
+        
+        // Handle function tools
+        if (toolData.tool_type === 'function') {
+            const editToolFunctionCode = document.getElementById('editToolFunctionCode');
+            let functionCode = '';
+            
+            if (window.editCodeMirrorEditor) {
+                functionCode = window.editCodeMirrorEditor.getValue();
+            } else {
+                functionCode = editToolFunctionCode.value || '';
+            }
+            
+            toolData.function_code = functionCode;
+        }
+        
+        // Handle MCP tools
+        if (toolData.tool_type === 'mcp') {
+            const mcpCommand = formData.get('editMcpCommand') || 'npx';
+            const mcpTimeout = parseInt(formData.get('editMcpTimeout')) || 300;
+            const mcpArgsText = formData.get('editMcpArgs') || '';
+            const mcpEnvText = formData.get('editMcpEnv') || '{}';
+            
+            // Parse arguments (newline-separated)
+            const mcpArgs = mcpArgsText.trim() ? mcpArgsText.trim().split('\n').map(arg => arg.trim()).filter(arg => arg) : [];
+            
+            // Parse environment variables (JSON)
+            let mcpEnv = {};
+            try {
+                if (mcpEnvText.trim()) {
+                    mcpEnv = JSON.parse(mcpEnvText);
+                    // Validate that all values are strings
+                    for (const [key, value] of Object.entries(mcpEnv)) {
+                        if (typeof value !== 'string') {
+                            this.showMessage(`Environment variable "${key}" must be a string value`, 'error');
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                this.showMessage(`Invalid JSON format for environment variables: ${e.message}`, 'error');
+                return;
+            }
+            
+            toolData.mcp_config = {
+                command: mcpCommand,
+                timeout: mcpTimeout,
+                args: mcpArgs,
+                env: mcpEnv
+            };
+        }
+        
+        try {
+            this.showLoading(true);
+            const response = await fetch(`/api/tools/${toolId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(toolData)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.showMessage('Tool updated successfully!', 'success');
+                this.hideModal('editToolModal');
+                
+                // Refresh tools list
+                await this.loadTools();
+            } else {
+                this.showMessage(data.detail || 'Failed to update tool', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating tool:', error);
+            this.showMessage('Error updating tool', 'error');
+        } finally {
+            this.showLoading(false);
         }
     }
     
@@ -1695,10 +2213,13 @@ class AgentGeniePlatform {
             // Show the edit modal first
             this.showModal('editToolModal');
             
-            // Show/hide function code section based on tool type
+            // Show/hide sections based on tool type
             const functionCodeSection = document.getElementById('editFunctionCodeSection');
+            const mcpConfigSection = document.getElementById('editMcpConfigSection');
+            
             if (tool.tool_type === 'function') {
                 functionCodeSection.classList.remove('hidden');
+                if (mcpConfigSection) mcpConfigSection.classList.add('hidden');
                 
                 // Set the function code value
                 const functionCode = tool.function_code || '';
@@ -1709,8 +2230,27 @@ class AgentGeniePlatform {
                 setTimeout(() => {
                     this.initializeEditCodeEditor();
                 }, 100);
+            } else if (tool.tool_type === 'mcp') {
+                functionCodeSection.classList.add('hidden');
+                if (mcpConfigSection) {
+                    mcpConfigSection.classList.remove('hidden');
+                    
+                    // Populate MCP configuration fields
+                    const mcpConfig = tool.mcp_config || tool.mcp_configuration || {};
+                    document.getElementById('editMcpCommand').value = mcpConfig.command || 'npx';
+                    document.getElementById('editMcpTimeout').value = mcpConfig.timeout || 300;
+                    
+                    // Set MCP arguments (array to newline-separated text)
+                    const mcpArgs = Array.isArray(mcpConfig.args) ? mcpConfig.args.join('\n') : '';
+                    document.getElementById('editMcpArgs').value = mcpArgs;
+                    
+                    // Set MCP environment variables (object to JSON string)
+                    const mcpEnv = mcpConfig.env || {};
+                    document.getElementById('editMcpEnv').value = JSON.stringify(mcpEnv, null, 2);
+                }
             } else {
                 functionCodeSection.classList.add('hidden');
+                if (mcpConfigSection) mcpConfigSection.classList.add('hidden');
             }
             
         } catch (error) {
@@ -2781,28 +3321,64 @@ class AgentGeniePlatform {
         event.preventDefault();
         
         const parentAgentId = document.getElementById('parentAgentSelect')?.value;
-        const existingAgentId = document.getElementById('existingAgentSelect')?.value;
+        
+        // Get all selected agents from checkboxes
+        const selectedCheckboxes = document.querySelectorAll('#existingAgentSelect input[name="selectedAgents"]:checked');
+        const selectedAgentIds = Array.from(selectedCheckboxes).map(cb => cb.value);
         
         if (!parentAgentId) {
             this.showMessage('Please select a parent agent first', 'warning');
             return;
         }
         
-        if (!existingAgentId) {
-            this.showMessage('Please select an agent to link', 'warning');
+        if (selectedAgentIds.length === 0) {
+            this.showMessage('Please select at least one agent to link', 'warning');
             return;
         }
 
+        console.log(`🔗 Linking ${selectedAgentIds.length} agents as sub-agents to ${parentAgentId}`);
+
         try {
             this.showLoading(true);
-            const response = await fetch(`/api/agents/${parentAgentId}/sub-agents/from-existing`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source_agent_id: existingAgentId })
-            });
+            let successCount = 0;
+            let errorCount = 0;
+            const errors = [];
+            
+            // Link each selected agent individually
+            for (const agentId of selectedAgentIds) {
+                try {
+                    const response = await fetch(`/api/agents/${parentAgentId}/sub-agents/from-existing`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ source_agent_id: agentId })
+                    });
 
-            if (response.ok) {
-                this.showMessage('Agent linked as sub-agent successfully!', 'success');
+                    if (response.ok) {
+                        successCount++;
+                        console.log(`✅ Successfully linked agent ${agentId}`);
+                    } else {
+                        const error = await response.json();
+                        errorCount++;
+                        errors.push(`${agentId}: ${error.detail || 'Unknown error'}`);
+                        console.error(`❌ Failed to link agent ${agentId}:`, error);
+                    }
+                } catch (error) {
+                    errorCount++;
+                    errors.push(`${agentId}: ${error.message}`);
+                    console.error(`❌ Error linking agent ${agentId}:`, error);
+                }
+            }
+            
+            // Show summary message
+            if (successCount > 0 && errorCount === 0) {
+                this.showMessage(`Successfully linked ${successCount} agent(s) as sub-agents!`, 'success');
+            } else if (successCount > 0 && errorCount > 0) {
+                this.showMessage(`Linked ${successCount} agents successfully, ${errorCount} failed. Check console for details.`, 'warning');
+            } else {
+                this.showMessage(`Failed to link all ${errorCount} agents. ${errors.join('; ')}`, 'error');
+            }
+            
+            if (successCount > 0) {
                 this.hideModal('linkExistingAgentModal');
                 this.resetLinkExistingAgentForm();
                 
@@ -2811,14 +3387,12 @@ class AgentGeniePlatform {
                 this.renderSubAgentsList(subAgents);
                 
                 // Refresh available agents dropdown
-                this.populateExistingAgentSelect();
-            } else {
-                const error = await response.json();
-                this.showMessage(`Error: ${error.detail || 'Failed to link agent'}`, 'error');
+                await this.populateExistingAgentSelect();
             }
+            
         } catch (error) {
-            console.error('Error linking agent:', error);
-            this.showMessage('Error linking agent', 'error');
+            console.error('❌ Error linking agents:', error);
+            this.showMessage('Error linking agents', 'error');
         } finally {
             this.showLoading(false);
         }
@@ -2869,24 +3443,57 @@ class AgentGeniePlatform {
     }
 
     async populateExistingAgentSelect() {
-        const select = document.getElementById('existingAgentSelect');
-        if (!select) return;
+        const container = document.getElementById('existingAgentSelect');
+        if (!container) return;
 
         try {
+            console.log("🔍 Loading available agents for sub-agent selection...");
             const availableAgents = await this.loadAvailableAgentsForSub();
             
-            // Clear existing options
-            select.innerHTML = '<option value="">Choose an agent...</option>';
+            console.log("📋 Available agents:", availableAgents);
             
-            // Add available agents
+            // Clear existing content
+            container.innerHTML = '';
+            
+            if (availableAgents.length === 0) {
+                container.innerHTML = `
+                    <div class="flex items-center justify-center py-4 text-gray-500">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        No agents available for sub-agent selection
+                    </div>
+                `;
+                return;
+            }
+            
+            // Add checkbox for each agent
             availableAgents.forEach(agent => {
-                const option = document.createElement('option');
-                option.value = agent.id;
-                option.textContent = `${agent.name} - ${agent.description}`;
-                select.appendChild(option);
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.className = 'flex items-center p-2 hover:bg-gray-100 rounded';
+                checkboxDiv.innerHTML = `
+                    <input type="checkbox" 
+                           id="agent_${agent.id}" 
+                           name="selectedAgents" 
+                           value="${agent.id}" 
+                           class="mr-3 h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2">
+                    <label for="agent_${agent.id}" class="flex-1 text-sm cursor-pointer">
+                        <div class="font-medium text-gray-900">${agent.name}</div>
+                        <div class="text-gray-600">${agent.description || 'No description'}</div>
+                        <div class="text-xs text-gray-500">Type: ${agent.agent_type || 'Unknown'}</div>
+                    </label>
+                `;
+                container.appendChild(checkboxDiv);
             });
+            
+            console.log(`✅ Populated ${availableAgents.length} agents for selection`);
+            
         } catch (error) {
-            console.error('Error populating existing agent select:', error);
+            console.error('❌ Error populating existing agent select:', error);
+            container.innerHTML = `
+                <div class="flex items-center justify-center py-4 text-red-500">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Error loading agents: ${error.message}
+                </div>
+            `;
         }
     }
 
@@ -3067,12 +3674,36 @@ class AgentGeniePlatform {
         }
     }
     
-    copyEmbedCode() {
+    async copyEmbedCode() {
         const codeTextarea = document.getElementById('embedCode');
-        if (codeTextarea) {
+        if (!codeTextarea || !codeTextarea.value) {
+            this.showMessage('No embed code to copy', 'warning');
+            return;
+        }
+
+        try {
+            // Modern Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(codeTextarea.value);
+                this.showMessage('Embed code copied to clipboard!', 'success');
+            } else {
+                // Fallback for older browsers
+                codeTextarea.select();
+                codeTextarea.setSelectionRange(0, 99999); // For mobile devices
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    this.showMessage('Embed code copied to clipboard!', 'success');
+                } else {
+                    throw new Error('Copy command failed');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to copy embed code:', error);
+            this.showMessage('Failed to copy embed code. Please copy manually.', 'error');
+            
+            // Select the text so user can copy manually
             codeTextarea.select();
-            document.execCommand('copy');
-            this.showMessage('Embed code copied to clipboard!', 'success');
+            codeTextarea.setSelectionRange(0, 99999);
         }
     }
     
@@ -3082,63 +3713,7 @@ class AgentGeniePlatform {
         window.open(fullUrl, '_blank', 'width=800,height=600');
     }
     
-    async createAgentEmbed() {
-        try {
-            // Get the current agent ID from the form
-            const agentId = document.getElementById('agentId')?.value;
-            const agentName = document.getElementById('agentName')?.value;
-            
-            if (!agentId || !agentName) {
-                this.showMessage('Please save the agent first before creating an embed', 'warning');
-                return;
-            }
-            
-            // Show loading state
-            const createEmbedBtn = document.getElementById('createEmbedBtn');
-            const originalText = createEmbedBtn.innerHTML;
-            createEmbedBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Creating...';
-            createEmbedBtn.disabled = true;
-            
-            // Call the API to create embed
-            const response = await fetch(`/api/agents/${agentId}/embed`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                // Show the embed code container
-                const embedCodeContainer = document.getElementById('embedCodeContainer');
-                const embedCode = document.getElementById('embedCode');
-                
-                if (embedCodeContainer && embedCode) {
-                    embedCodeContainer.classList.remove('hidden');
-                    
-                    // Generate the embed code
-                    const embedHtml = this.generateEmbedCode(agentName, data.embed_url);
-                    embedCode.value = embedHtml;
-                    
-                    this.showMessage('Embed created successfully!', 'success');
-                }
-            } else {
-                this.showMessage(data.detail || 'Failed to create embed', 'error');
-            }
-            
-        } catch (error) {
-            console.error('Error creating embed:', error);
-            this.showMessage('Failed to create embed: ' + error.message, 'error');
-        } finally {
-            // Restore button state
-            const createEmbedBtn = document.getElementById('createEmbedBtn');
-            if (createEmbedBtn) {
-                createEmbedBtn.innerHTML = '<i class="fas fa-code mr-1"></i>Create Embed';
-                createEmbedBtn.disabled = false;
-            }
-        }
-    }
+    // Removed old createAgentEmbed function - replaced with modal-based system
     
     generateEmbedCode(agentName, embedUrl) {
         const fullUrl = window.location.origin + embedUrl;
@@ -3159,15 +3734,62 @@ class AgentGeniePlatform {
         // Create embed button
         const createEmbedBtn = document.getElementById('createEmbedBtn');
         if (createEmbedBtn) {
-            createEmbedBtn.addEventListener('click', () => {
-                this.createAgentEmbed();
+            console.log("🔧 Binding embed button event");
+            // Remove any existing event listeners first
+            createEmbedBtn.replaceWith(createEmbedBtn.cloneNode(true));
+            const newBtn = document.getElementById('createEmbedBtn');
+            newBtn.addEventListener('click', (e) => {
+                console.log("🎯 Create Embed button clicked");
+                e.preventDefault();
+                e.stopPropagation();
+                this.openEmbedCreationModal();
             });
+        }
+        
+        // Embed creation modal events
+        const embedCreationModal = document.getElementById('embedCreationModal');
+        if (embedCreationModal) {
+            // Close modal
+            embedCreationModal.querySelector('.modal-close').addEventListener('click', () => {
+                this.closeEmbedCreationModal();
+            });
+            
+            // Cancel button
+            const cancelBtn = document.getElementById('cancelEmbedCreationBtn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    this.closeEmbedCreationModal();
+                });
+            }
+            
+            // Form submission
+            const embedForm = document.getElementById('embedCreationForm');
+            if (embedForm) {
+                embedForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleEmbedCreationSubmit();
+                });
+            }
+            
+            // Purpose change handler
+            const purposeSelect = document.getElementById('embedPurpose');
+            if (purposeSelect) {
+                purposeSelect.addEventListener('change', (e) => {
+                    this.handlePurposeChange(e);
+                });
+            }
         }
         
         // Copy embed code button
         const copyEmbedCodeBtn = document.getElementById('copyEmbedCodeBtn');
         if (copyEmbedCodeBtn) {
-            copyEmbedCodeBtn.addEventListener('click', () => this.copyEmbedCode());
+            console.log("🔧 Copy embed code button found and bound");
+            copyEmbedCodeBtn.addEventListener('click', () => {
+                console.log("📋 Copy embed code button clicked");
+                this.copyEmbedCode();
+            });
+        } else {
+            console.warn("⚠️ Copy embed code button not found");
         }
         
         // Preview embed button
@@ -3331,29 +3953,12 @@ class AgentGeniePlatform {
     }
     
     async createNewEmbed(agentId) {
-        try {
-            const response = await fetch(`/api/agents/${agentId}/embed`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            // Reload embeds list
-            this.loadAgentEmbeds(agentId);
-            
-            this.showMessage('New embed created successfully!', 'success');
-            
-        } catch (error) {
-            console.error('Error creating embed:', error);
-            this.showMessage('Failed to create embed: ' + error.message, 'error');
-        }
+        console.log("🎯 createNewEmbed called, redirecting to modal system");
+        // Set the current agent context for the modal
+        this.currentAgent = { id: agentId };
+        
+        // Open the embed creation modal instead of direct creation
+        this.openEmbedCreationModal();
     }
     
     async deleteEmbed(embedId) {
@@ -3369,6 +3974,10 @@ class AgentGeniePlatform {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
+            
+            // Reload global embeds count
+            await this.loadEmbeds();
+            this.updateDashboardStats();
             
             // Reload embeds list
             const select = document.getElementById('embedAgentSelect');
@@ -3402,6 +4011,31 @@ class AgentGeniePlatform {
     testEmbed(embedId) {
         const embedUrl = `/api/embed/${embedId}`;
         this.previewEmbed(embedUrl);
+    }
+    
+    validateIdentifierName(input, fieldName) {
+        const value = input.value;
+        const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+        
+        // Remove invalid characters
+        const cleanedValue = value.replace(/[^a-zA-Z0-9_]/g, '');
+        
+        // Ensure it starts with letter or underscore
+        const finalValue = cleanedValue.replace(/^[0-9]/, '');
+        
+        if (value !== finalValue) {
+            input.value = finalValue;
+            this.showMessage(`${fieldName} can only contain letters, numbers, and underscores, and must start with a letter or underscore.`, 'warning');
+        }
+        
+        // Add visual feedback
+        if (finalValue && !validPattern.test(finalValue)) {
+            input.classList.add('border-red-500');
+            input.classList.remove('border-gray-300');
+        } else {
+            input.classList.remove('border-red-500');
+            input.classList.add('border-gray-300');
+        }
     }
 }
 

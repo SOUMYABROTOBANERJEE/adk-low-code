@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sub-Agent Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-container { max-width: 800px; margin: 0 auto; }
+        .test-button { 
+            background: #007bff; color: white; border: none; 
+            padding: 10px 20px; margin: 5px; border-radius: 5px; 
+            cursor: pointer; 
+        }
+        .test-button:hover { background: #0056b3; }
+        .response { 
+            background: #f8f9fa; border: 1px solid #dee2e6; 
+            padding: 15px; margin: 10px 0; border-radius: 5px; 
+            white-space: pre-wrap; 
+        }
+        .success { border-color: #28a745; background: #d4edda; }
+        .error { border-color: #dc3545; background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Sub-Agent Execution Test</h1>
+        <p>Testing if the Wikipedia agent can use sub_agent_executor to delegate to GitHub agent</p>
+        
+        <div>
+            <button class="test-button" onclick="testSubAgent('Use the sub_agent_executor tool with input: \"Search for Langfuse GitHub repository information\"')">
+                Test 1: Direct sub_agent_executor call
+            </button>
+            
+            <button class="test-button" onclick="testSubAgent('Call sub_agent_executor with input: \"Find Langfuse GitHub repo details\"')">
+                Test 2: Call sub_agent_executor
+            </button>
+            
+            <button class="test-button" onclick="testSubAgent('Please use sub_agent_executor to delegate this question: \"Search for Langfuse GitHub repository\"')">
+                Test 3: Delegate with sub_agent_executor
+            </button>
+            
+            <button class="test-button" onclick="testSubAgent('Since Wikipedia doesn\'t have Langfuse info, use sub_agent_executor with: \"Get Langfuse GitHub repository information\"')">
+                Test 4: Context-aware delegation
+            </button>
+        </div>
+        
+        <div id="response" class="response" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function testSubAgent(message) {
+            const responseDiv = document.getElementById('response');
+            responseDiv.style.display = 'block';
+            responseDiv.className = 'response';
+            responseDiv.textContent = '🔄 Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/chat/agent_1757753931906_egs3go', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: 'test_sub_agent_' + Date.now()
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const responseText = result.response || 'No response';
+                    
+                    responseDiv.textContent = `✅ SUCCESS!\n\nResponse: ${responseText}`;
+                    
+                    // Check if sub-agent was used
+                    if (responseText.toLowerCase().includes('sub_agent_executor') || 
+                        responseText.toLowerCase().includes('delegate') ||
+                        responseText.toLowerCase().includes('github') ||
+                        responseText.toLowerCase().includes('repository')) {
+                        responseDiv.className = 'response success';
+                        responseDiv.textContent += '\n\n🎯 SUB-AGENT EXECUTION DETECTED!';
+                    } else {
+                        responseDiv.className = 'response error';
+                        responseDiv.textContent += '\n\n❌ Sub-agent executor was not used';
+                    }
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = `❌ Error: ${response.status}\n${await response.text()}`;
+                }
+            } catch (error) {
+                responseDiv.className = 'response error';
+                responseDiv.textContent = `❌ Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

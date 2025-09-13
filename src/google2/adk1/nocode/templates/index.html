@@ -306,7 +306,7 @@
                 <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-gray-900">Recent Agents</h3>
-                        <button onclick="showSection('agents')" class="text-primary hover:text-primary-dark text-sm font-medium">View All</button>
+                        <button onclick="app.showSection('agents').catch(console.error)" class="text-primary hover:text-primary-dark text-sm font-medium">View All</button>
                     </div>
                     <div id="recentAgents" class="space-y-3">
                         <p class="text-gray-500 text-sm">No agents created yet</p>
@@ -317,7 +317,7 @@
                 <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-gray-900">Recent Tools</h3>
-                        <button onclick="showSection('tools')" class="text-primary hover:text-primary-dark text-sm font-medium">View All</button>
+                        <button onclick="app.showSection('tools').catch(console.error)" class="text-primary hover:text-primary-dark text-sm font-medium">View All</button>
                     </div>
                     <div id="recentTools" class="space-y-3">
                         <p class="text-gray-500 text-sm">No tools created yet</p>
@@ -536,7 +536,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Embed Options</label>
                         <div class="border border-gray-300 rounded-md p-3">
                             <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-600">Make this agent embeddable on any website</span>
+                                <span class="text-sm text-gray-600">Make this agent embeddable on websites</span>
                                 <button type="button" id="createEmbedBtn" class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
                                     <i class="fas fa-code mr-1"></i>Create Embed
                                 </button>
@@ -587,15 +587,31 @@
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Model Provider</label>
+                            <select id="agentModelProvider" name="agentModelProvider" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" onchange="app.handleModelProviderChange()">
+                                <option value="google">Google (Gemini)</option>
+                                <option value="openai">OpenAI (GPT)</option>
+                                <option value="azure_openai">Azure OpenAI</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="mistral">Mistral AI</option>
+                                <option value="ollama">Ollama (Local)</option>
+                            </select>
+                        </div>
+                        
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Model</label>
                             <select id="agentModel" name="agentModel" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
                                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                             </select>
                         </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
@@ -693,6 +709,7 @@
                                 <option value="function">Function Tool</option>
                                 <option value="builtin">Built-in Tool</option>
                                 <option value="google_cloud">Google Cloud Tool</option>
+                                <option value="mcp">MCP Server Tool</option>
                             </select>
                         </div>
                     </div>
@@ -732,6 +749,59 @@
                             <div id="codeEditor" class="min-h-[200px]"></div>
                         </div>
                         <p class="text-sm text-gray-600 mt-1">Write a Python function that will be executed when the tool is called.</p>
+                    </div>
+                    
+                    <div id="mcpConfigSection" class="hidden space-y-4">
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h4 class="text-sm font-medium text-blue-900 mb-2">MCP Server Configuration</h4>
+                            <p class="text-sm text-blue-700 mb-3">Configure the MCP server connection parameters</p>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Command</label>
+                                <input type="text" id="mcpCommand" name="mcpCommand" 
+                                       class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                                       placeholder="npx" value="npx">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Timeout (seconds)</label>
+                                <input type="number" id="mcpTimeout" name="mcpTimeout" 
+                                       class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                                       placeholder="300" value="300" min="30" max="3600">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Arguments (one per line)</label>
+                            <textarea id="mcpArgs" name="mcpArgs" rows="3"
+                                      class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                                      placeholder="-y&#10;@modelcontextprotocol/server-example"></textarea>
+                            <p class="text-sm text-gray-600 mt-1">Enter each argument on a separate line</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Environment Variables (JSON format)</label>
+                            <div class="flex gap-2 mb-2">
+                                <button type="button" onclick="app.loadEnvTemplate('aws')" class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
+                                    AWS Template
+                                </button>
+                                <button type="button" onclick="app.loadEnvTemplate('github')" class="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                                    GitHub Template
+                                </button>
+                                <button type="button" onclick="app.loadEnvTemplate('database')" class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors">
+                                    Database Template
+                                </button>
+                                <button type="button" onclick="app.clearEnvTemplate()" class="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                            <textarea id="mcpEnv" name="mcpEnv" rows="6"
+                                      class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                                      placeholder='{&#10;  "AWS_ACCESS_KEY_ID": "your_key",&#10;  "AWS_SECRET_ACCESS_KEY": "your_secret",&#10;  "AWS_REGION": "us-east-1",&#10;  "NODE_ENV": "production",&#10;  "DEBUG": "true"&#10;}'></textarea>
+                            <p class="text-sm text-gray-600 mt-1">Enter environment variables in JSON format. Use templates above for common configurations.</p>
+                        </div>
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">
@@ -780,10 +850,11 @@
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Tool Type</label>
-                            <select id="editToolType" name="editToolType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                            <select id="editToolType" name="editToolType" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" onchange="app.handleEditToolTypeChange(event)">
                                 <option value="function">Function Tool</option>
                                 <option value="builtin">Built-in Tool</option>
                                 <option value="google_cloud">Google Cloud Tool</option>
+                                <option value="mcp">MCP Server Tool</option>
                             </select>
                         </div>
                     </div>
@@ -823,6 +894,58 @@
                             <div id="editCodeEditor" class="min-h-[200px]"></div>
                         </div>
                         <p class="text-sm text-gray-600 mt-1">Write a Python function that will be executed when the tool is called.</p>
+                    </div>
+                    
+                    <!-- MCP Configuration Section for Edit Modal -->
+                    <div id="editMcpConfigSection" class="hidden space-y-4">
+                        <h4 class="text-md font-medium text-gray-900 border-b border-gray-200 pb-2">MCP Server Configuration</h4>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Command</label>
+                                <input type="text" id="editMcpCommand" name="editMcpCommand" value="npx"
+                                       class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                                       placeholder="npx">
+                                <p class="text-sm text-gray-600 mt-1">Command to run the MCP server (usually 'npx')</p>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Timeout (seconds)</label>
+                                <input type="number" id="editMcpTimeout" name="editMcpTimeout" value="300" min="30" max="600"
+                                       class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <p class="text-sm text-gray-600 mt-1">Server connection timeout</p>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Arguments (one per line)</label>
+                            <textarea id="editMcpArgs" name="editMcpArgs" rows="3"
+                                      class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                                      placeholder="-y&#10;@modelcontextprotocol/server-filesystem"></textarea>
+                            <p class="text-sm text-gray-600 mt-1">Command arguments, one per line. Example: -y, @modelcontextprotocol/server-filesystem</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Environment Variables (JSON format)</label>
+                            <div class="flex gap-2 mb-2">
+                                <button type="button" onclick="app.loadEditEnvTemplate('aws')" class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
+                                    AWS Template
+                                </button>
+                                <button type="button" onclick="app.loadEditEnvTemplate('github')" class="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+                                    GitHub Template
+                                </button>
+                                <button type="button" onclick="app.loadEditEnvTemplate('database')" class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors">
+                                    Database Template
+                                </button>
+                                <button type="button" onclick="app.clearEditEnvTemplate()" class="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
+                            <textarea id="editMcpEnv" name="editMcpEnv" rows="6"
+                                      class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                                      placeholder='{&#10;  "AWS_ACCESS_KEY_ID": "your_key",&#10;  "AWS_SECRET_ACCESS_KEY": "your_secret",&#10;  "AWS_REGION": "us-east-1",&#10;  "NODE_ENV": "production",&#10;  "DEBUG": "true"&#10;}'></textarea>
+                            <p class="text-sm text-gray-600 mt-1">Enter environment variables in JSON format. Use templates above for common configurations.</p>
+                        </div>
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">
@@ -935,11 +1058,14 @@
                 
                 <form id="linkExistingAgentForm" class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Select Agent to Link</label>
-                        <select id="existingAgentSelect" name="existingAgentSelect" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                            <option value="">Choose an agent...</option>
-                        </select>
-                        <p class="text-sm text-gray-600 mt-1">This will add the selected agent as a sub-agent to the current parent agent.</p>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Select Agents to Link (Multi-Select)</label>
+                        <div id="existingAgentSelect" class="w-full border border-gray-300 rounded-md p-3 max-h-64 overflow-y-auto bg-gray-50">
+                            <div class="flex items-center justify-center py-4 text-gray-500">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>
+                                Loading agents...
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Select one or more agents to add as sub-agents. You can select multiple agents.</p>
                     </div>
                     
                     <div class="flex justify-end space-x-3 pt-4">
@@ -948,6 +1074,150 @@
                         </button>
                         <button type="submit" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">
                             Link Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embed Creation Modal -->
+    <div id="embedCreationModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-2/3 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Create Agent Embed</h3>
+                    <button class="modal-close text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <form id="embedCreationForm" class="space-y-6">
+                    <!-- Agent Information -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 class="text-sm font-medium text-blue-900 mb-2">Agent Information</h4>
+                        <p class="text-sm text-blue-700">Creating embed for: <span id="embedAgentName" class="font-semibold"></span></p>
+                    </div>
+                    
+                    <!-- Purpose and Environment -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Purpose of Use *</label>
+                            <select id="embedPurpose" name="embedPurpose" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Select purpose...</option>
+                                <option value="customer_support">Customer Support</option>
+                                <option value="sales_assistance">Sales Assistance</option>
+                                <option value="technical_help">Technical Help</option>
+                                <option value="information_query">Information Query</option>
+                                <option value="educational">Educational</option>
+                                <option value="internal_tool">Internal Tool</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Environment *</label>
+                            <select id="embedEnvironment" name="embedEnvironment" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Select environment...</option>
+                                <option value="development">Development</option>
+                                <option value="staging">Staging</option>
+                                <option value="production">Production</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Custom Purpose -->
+                    <div id="customPurposeSection" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Custom Purpose Description</label>
+                        <textarea id="customPurposeText" name="customPurposeText" rows="2" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Describe the specific purpose of this embed..."></textarea>
+                    </div>
+                    
+                    <!-- Usage Estimates -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Estimated Requests per Hour *</label>
+                            <select id="embedRequestsPerHour" name="embedRequestsPerHour" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Select range...</option>
+                                <option value="1-10">1-10 requests/hour</option>
+                                <option value="11-50">11-50 requests/hour</option>
+                                <option value="51-100">51-100 requests/hour</option>
+                                <option value="101-500">101-500 requests/hour</option>
+                                <option value="501-1000">501-1000 requests/hour</option>
+                                <option value="1000+">1000+ requests/hour</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Estimated Payload Size *</label>
+                            <select id="embedPayloadSize" name="embedPayloadSize" required class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Select size...</option>
+                                <option value="small">Small (< 1KB)</option>
+                                <option value="medium">Medium (1-10KB)</option>
+                                <option value="large">Large (10-100KB)</option>
+                                <option value="xlarge">Extra Large (> 100KB)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- URL Whitelisting -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">System URL to be Whitelisted *</label>
+                        <div class="space-y-2">
+                            <input type="url" id="embedSystemUrl" name="embedSystemUrl" required 
+                                   class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" 
+                                   placeholder="https://example.com">
+                            <div class="flex items-center space-x-2">
+                                <input type="checkbox" id="embedStrictWhitelist" name="embedStrictWhitelist" class="rounded">
+                                <label for="embedStrictWhitelist" class="text-sm text-gray-700">
+                                    <strong>Strict Whitelisting:</strong> Only allow requests from this exact URL
+                                </label>
+                            </div>
+                            <p class="text-sm text-gray-600">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                With strict whitelisting enabled, only requests from this exact URL will be allowed. 
+                                This provides maximum security but may break if the URL changes.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional URLs -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Additional URLs (Optional)</label>
+                        <div id="additionalUrlsContainer" class="space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <input type="url" name="additionalUrl" class="flex-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary" placeholder="https://subdomain.example.com">
+                                <button type="button" onclick="app.removeAdditionalUrl(this)" class="px-3 py-2 text-red-600 hover:text-red-800">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="app.addAdditionalUrl()" class="mt-2 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                            <i class="fas fa-plus mr-1"></i>Add Another URL
+                        </button>
+                    </div>
+                    
+                    <!-- Security Notice -->
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <i class="fas fa-shield-alt text-yellow-600 mt-1 mr-2"></i>
+                            <div>
+                                <h4 class="text-sm font-medium text-yellow-900 mb-1">Security Notice</h4>
+                                <p class="text-sm text-yellow-700">
+                                    The embed will be configured with URL whitelisting for security. 
+                                    Only requests from the specified URLs will be allowed. 
+                                    Make sure to test the embed thoroughly before deploying to production.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Form Actions -->
+                    <div class="flex justify-end space-x-3 pt-4 border-t">
+                        <button type="button" id="cancelEmbedCreationBtn" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" id="generateEmbedBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-code mr-1"></i>Generate Embed Code
                         </button>
                     </div>
                 </form>
